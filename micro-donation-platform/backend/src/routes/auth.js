@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { authenticate } = require('../middleware/auth');
 const {
   register,
   login,
@@ -10,6 +11,7 @@ const {
 
 router.post('/register', register);
 router.post('/login', login);
+router.get('/me', authenticate, (req, res) => res.json({ user: req.user }));
 router.get('/verify/:token', verifyEmail);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);

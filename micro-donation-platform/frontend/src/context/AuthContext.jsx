@@ -9,10 +9,26 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (token) {
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    let active = true;
+    if (!token) {
+      delete api.defaults.headers.common['Authorization'];
+      setLoading(false);
+      return;
     }
-    setLoading(false);
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    setLoading(true);
+    api.get('/auth/me')
+      .then(({ data }) => { if (active) setUser(data.user); })
+      .catch(() => {
+        if (active) {
+          setUser(null);
+          setToken(null);
+          localStorage.removeItem('token');
+          delete api.defaults.headers.common['Authorization'];
+        }
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [token]);
 
   const login = (userData, userToken) => {

@@ -7,6 +7,22 @@ process.env.RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || 'du
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+// Exercise real authentication with a database fixture instead of an environment bypass.
+jest.mock('../src/config/supabase', () => ({
+  from: jest.fn(() => ({
+    select: jest.fn(() => ({
+      eq: jest.fn(() => ({
+        single: jest.fn().mockResolvedValue({
+          data: {
+            id: '11111111-1111-1111-1111-111111111111',
+            email: 'testdonor@example.com', role: 'donor', is_verified: true,
+          },
+          error: null,
+        }),
+      })),
+    })),
+  })),
+}));
 const app = require('../src/index');
 
 describe('Issue #7 — Razorpay Payment Integration', () => {
