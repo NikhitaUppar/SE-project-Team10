@@ -3,10 +3,6 @@ import { useParams, Link } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
-// Default development test token so testing is frictionless before auth module is merged
-const DEV_TEST_TOKEN =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjExMTExMTExLTExMTEtMTExMS0xMTExLTExMTExMTExMTExMSIsImVtYWlsIjoiZG9ub3JAZXhhbXBsZS5jb20iLCJyb2xlIjoiZG9ub3IiLCJpYXQiOjE3OTIwODg4NjcsImV4cCI6MTgyMzYyNDg2N30.rLn6Qwq_8gz2iJIFL_3BwyKfN1SUo-HI8p1YlE6c-68';
-
 export default function CampaignDetail() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -20,12 +16,6 @@ export default function CampaignDetail() {
   const [paymentSuccess, setPaymentSuccess] = useState(null);
 
   useEffect(() => {
-    // Ensure test token is present for seamless local testing
-    if (!localStorage.getItem('token')) {
-      localStorage.setItem('token', DEV_TEST_TOKEN);
-      api.defaults.headers.common['Authorization'] = `Bearer ${DEV_TEST_TOKEN}`;
-    }
-
     const fetchCampaign = async () => {
       try {
         const res = await api.get(`/campaigns/${id}`);

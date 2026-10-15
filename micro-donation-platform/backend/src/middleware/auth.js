@@ -9,29 +9,20 @@ const authenticate = async (req, res, next) => {
 
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Fast-path for testing or placeholder environment to avoid network timeout on fake domain
-    if (
-      process.env.NODE_ENV === 'test' ||
-      !process.env.SUPABASE_URL ||
-      process.env.SUPABASE_URL.includes('your-project')
-    ) {
-      req.user = {
-        id: decoded.id,
-        email: decoded.email || 'donor@example.com',
-        role: decoded.role || 'donor',
-      };
-      return next();
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
+    if (typeof decoded.id !== 'string' || !decoded.id || typeof decoded.exp !== 'number') {
+      return res.status(401).json({ error: 'Invalid token' });
     }
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('*')
+      .select('id, email, role, display_name, is_verified')
       .eq('id', decoded.id)
       .single();
 
-    if (error || !user) return res.status(401).json({ error: 'Invalid token' });
+    if (error || !user || !user.is_verified) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
     req.user = user;
     next();
   } catch (err) {

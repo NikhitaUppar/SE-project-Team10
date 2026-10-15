@@ -57,13 +57,42 @@ const register = async (req, res) => {
 
 // FR-02: Login
 const login = async (req, res) => {
-  // TODO (harishreddy2005): Implement login
-  // 1. Find user by email
-  // 2. Check is_verified — return 403 if not
-  // 3. Compare password with bcrypt
-  // 4. Sign JWT with { id, email, role }, expires in 7d
-  // 5. Return token
-  res.status(501).json({ error: 'Not implemented yet' });
+  const { email, password } = req.body || {};
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  if (
+    normalizedEmail.length > 254 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) ||
+    typeof password !== 'string' || !password ||
+    Buffer.byteLength(password, 'utf8') > 72
+  ) {
+    return res.status(400).json({ error: 'A valid email and password are required' });
+  }
+
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, email, role, display_name, is_verified, password_hash')
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+    if (error) return res.status(500).json({ error: 'Unable to log in' });
+    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    if (!user.is_verified) {
+      return res.status(403).json({ error: 'Please verify your email before logging in' });
+    }
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { algorithm: 'HS256', expiresIn: '7d' }
+    );
+    return res.status(200).json({
+      token,
+      user: { id: user.id, email: user.email, role: user.role, display_name: user.display_name },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Unable to log in' });
+  }
 };
 
 // FR-03: Verify email
