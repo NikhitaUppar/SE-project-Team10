@@ -6,15 +6,53 @@ const { sendVerificationEmail, sendPasswordResetEmail } = require('./emailContro
 
 // FR-01: Register
 const register = async (req, res) => {
-  // TODO (harishreddy2005): Implement registration
-  // 1. Validate email + password (min 8 chars)
-  // 2. Check if email already exists in 'users' table
-  // 3. Hash password with bcrypt (work factor 12)
-  // 4. Insert user into 'users' table with is_verified=false
-  // 5. Generate verification token, save to 'email_tokens' table
-  // 6. Call sendVerificationEmail(email, token)
-  // 7. Return 201 with success message
-  res.status(501).json({ error: 'Not implemented yet' });
+  const { display_name: displayName, email, password } = req.body || {};
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+
+  if (
+    typeof displayName !== 'string' ||
+    !displayName.trim() ||
+    normalizedEmail.length > 254 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) ||
+    typeof password !== 'string' ||
+    password.length < 8 ||
+    Buffer.byteLength(password, 'utf8') > 72
+  ) {
+    return res.status(400).json({
+      error: 'A display name, valid email, and password of 8 to 72 bytes are required',
+    });
+  }
+
+  const { data: existingUser, error: lookupError } = await supabase
+    .from('users')
+    .select('id')
+    .eq('email', normalizedEmail)
+    .maybeSingle();
+
+  if (lookupError) {
+    return res.status(500).json({ error: 'Unable to create account' });
+  }
+
+  if (existingUser) {
+    return res.status(400).json({ error: 'An account with this email already exists' });
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  const { error: insertError } = await supabase.from('users').insert({
+    display_name: displayName.trim(),
+    email: normalizedEmail,
+    password_hash: passwordHash,
+    is_verified: false,
+  });
+
+  if (insertError) {
+    if (insertError.code === '23505') {
+      return res.status(400).json({ error: 'An account with this email already exists' });
+    }
+    return res.status(500).json({ error: 'Unable to create account' });
+  }
+
+  return res.status(201).json({ message: 'Registration successful' });
 };
 
 // FR-02: Login
