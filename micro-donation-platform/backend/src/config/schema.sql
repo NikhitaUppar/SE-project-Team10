@@ -1,6 +1,7 @@
 -- ============================================================
 -- Micro Donation Platform — Supabase Schema
 -- Run this in your Supabase SQL editor
+-- Then apply migrations/005_email_verification.sql to enable email verification.
 -- ============================================================
 
 -- Users

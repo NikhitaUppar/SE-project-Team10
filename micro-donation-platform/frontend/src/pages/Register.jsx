@@ -50,6 +50,7 @@ export default function Register() {
     <div className="max-w-md mx-auto bg-white p-8 rounded-xl shadow-sm">
       <h2 className="text-2xl font-bold text-gray-800">Create your account</h2>
       <p className="text-gray-500 mt-2">Join MicroDonate to support causes you care about.</p>
+      <p className="text-sm text-gray-500 mt-2">We will email you a verification link. Verify your email before logging in.</p>
 
       <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
         <div>
