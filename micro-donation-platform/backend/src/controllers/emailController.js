@@ -10,13 +10,19 @@ const transporter = nodemailer.createTransport({
 });
 
 const sendVerificationEmail = async (email, token) => {
-  const url = `${process.env.CLIENT_URL}/verify-email?token=${token}`;
-  return await transporter.sendMail({
+  const url = new URL('/verify-email', process.env.CLIENT_URL);
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Invalid frontend URL');
+  // The fragment is not sent to the frontend web server or in Referer headers.
+  url.hash = new URLSearchParams({ token }).toString();
+  const info = await transporter.sendMail({
     from: process.env.EMAIL_FROM || 'noreply@microdonation.dev',
     to: email,
     subject: 'Verify your email — Micro Donation Platform',
-    html: `<p>Click <a href="${url}">here</a> to verify your email. Link expires in 24 hours.</p>`,
+    text: `Verify your email: ${url.href}\nThis link expires in 24 hours and can only be used once. If you did not create this account, ignore this email.`,
+    html: `<p>Click <a href="${url.href}">here</a> to verify your email. This link expires in 24 hours and can only be used once.</p><p>If you did not create this account, ignore this email.</p>`,
   });
+  if (!info?.accepted?.length || info.rejected?.length) throw new Error('Verification email not accepted');
+  return info;
 };
 
 const sendPasswordResetEmail = async (email, token) => {

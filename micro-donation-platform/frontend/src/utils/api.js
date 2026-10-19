@@ -16,7 +16,7 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401 && err.config?.url !== '/auth/login') {
+    if (err.response?.status === 401 && !['/auth/login', '/auth/resend-verification'].includes(err.config?.url)) {
       localStorage.removeItem('token');
       delete api.defaults.headers.common['Authorization'];
       window.location.href = '/login';
