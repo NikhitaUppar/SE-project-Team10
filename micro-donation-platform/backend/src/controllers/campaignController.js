@@ -16,13 +16,87 @@ const getCampaignById = async (req, res) => {
 };
 
 // FR-06: Create campaign
+
 const createCampaign = async (req, res) => {
-  // TODO (ramithanayak98-ar): Implement
-  // 1. Validate: title, description, goal_amount, category, deadline
-  // 2. Insert into 'campaigns' table with status='pending_review', owner_id=req.user.id
-  // 3. Return 201 with campaign
-  res.status(501).json({ error: 'Not implemented yet' });
+  try {
+    const {
+      title,
+      description,
+      goal_amount,
+      category,
+      deadline,
+    } = req.body;
+
+    // Check required fields
+    if (
+      typeof title !== 'string' || !title.trim() ||
+      typeof description !== 'string' || !description.trim() ||
+      goal_amount === undefined || goal_amount === null ||
+      typeof category !== 'string' || !category.trim() ||
+      !deadline
+    ) {
+      return res.status(400).json({
+        error: 'All fields are required: title, description, goal_amount, category, deadline',
+      });
+    }
+
+    // Validate the fundraising goal
+    const goal = Number(goal_amount);
+
+    if (!Number.isFinite(goal) || goal <= 0) {
+      return res.status(400).json({
+        error: 'goal_amount must be a positive number',
+      });
+    }
+
+    // Validate the deadline
+    const deadlineDate = new Date(deadline);
+
+    if (
+      Number.isNaN(deadlineDate.getTime()) ||
+      deadlineDate <= new Date()
+    ) {
+      return res.status(400).json({
+        error: 'deadline must be a valid future date',
+      });
+    }
+
+    // Save the campaign in Supabase
+    const { data, error } = await supabase
+      .from('campaigns')
+      .insert({
+        owner_id: req.user.id,
+        title: title.trim(),
+        description: description.trim(),
+        goal_amount: goal,
+        category: category.trim(),
+        deadline: deadlineDate.toISOString(),
+        status: 'pending_review',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Campaign creation failed:', error.message);
+
+      return res.status(500).json({
+        error: 'Failed to create campaign',
+      });
+    }
+
+    return res.status(201).json({
+      message: 'Campaign created successfully and is awaiting review',
+      campaign: data,
+    });
+  } catch (err) {
+    console.error('Campaign creation error:', err.message);
+
+    return res.status(500).json({
+      error: 'Internal server error',
+    });
+  }
 };
+
 
 // FR-07: Upload campaign file
 const uploadCampaignFile = async (req, res) => {
