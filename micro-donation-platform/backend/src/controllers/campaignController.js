@@ -99,13 +99,141 @@ const createCampaign = async (req, res) => {
 
 
 // FR-07: Upload campaign file
+
 const uploadCampaignFile = async (req, res) => {
-  // TODO (ramithanayak98-ar): Implement
-  // 1. Check req.file exists and size <= 5MB
-  // 2. Upload to Supabase Storage bucket 'campaign-files'
-  // 3. Save public URL to 'campaign_files' table
-  res.status(501).json({ error: 'Not implemented yet' });
+  let uploadedPath;
+
+  try {
+    // 1. Check whether a file was provided
+    if (!req.file) {
+      return res.status(400).json({
+        error: 'Please upload a JPG, PNG, or PDF file (maximum 5MB)',
+      });
+    }
+
+    // 2. Validate file type and size
+    const allowedTypes = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'application/pdf': 'pdf',
+    };
+
+    const extension = allowedTypes[req.file.mimetype];
+
+    if (!extension) {
+      return res.status(400).json({
+        error: 'Only JPG, PNG, and PDF files are allowed',
+      });
+    }
+
+    if (req.file.size > 5 * 1024 * 1024) {
+      return res.status(413).json({
+        error: 'File size must not exceed 5MB',
+      });
+    }
+
+    // 3. Check campaign ID and ownership
+    const campaignId = req.params.id;
+
+    const { data: campaign, error: campaignError } = await supabase
+      .from('campaigns')
+      .select('id, owner_id')
+      .eq('id', campaignId)
+      .maybeSingle();
+
+    if (campaignError) {
+      console.error('Campaign lookup failed:', campaignError.message);
+
+      return res.status(500).json({
+        error: 'Failed to check campaign',
+      });
+    }
+
+    if (!campaign) {
+      return res.status(404).json({
+        error: 'Campaign not found',
+      });
+    }
+
+    if (campaign.owner_id !== req.user.id) {
+      return res.status(403).json({
+        error: 'You can only upload files to your own campaign',
+      });
+    }
+
+    // 4. Create a unique storage path
+    uploadedPath =
+      `${campaignId}/${Date.now()}-${require('crypto').randomUUID()}.${extension}`;
+
+    // 5. Upload the file to Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from('campaign-files')
+      .upload(uploadedPath, req.file.buffer, {
+        contentType: req.file.mimetype,
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error('File upload failed:', uploadError.message);
+
+      return res.status(500).json({
+        error: 'Failed to upload file',
+      });
+    }
+
+    // 6. Get the file's public URL
+    const { data: publicUrlData } = supabase.storage
+      .from('campaign-files')
+      .getPublicUrl(uploadedPath);
+
+    const fileUrl = publicUrlData.publicUrl;
+
+    // 7. Save the URL and file type in the database
+    const { data: savedFile, error: saveError } = await supabase
+      .from('campaign_files')
+      .insert({
+        campaign_id: campaignId,
+        file_url: fileUrl,
+        file_type: req.file.mimetype,
+      })
+      .select()
+      .single();
+
+    if (saveError) {
+      console.error('Saving file record failed:', saveError.message);
+
+      // Remove the uploaded file if its database record failed
+      await supabase.storage
+        .from('campaign-files')
+        .remove([uploadedPath]);
+
+      return res.status(500).json({
+        error: 'Failed to save file information',
+      });
+    }
+
+    // 8. Send success response
+    return res.status(201).json({
+      message: 'Campaign file uploaded successfully',
+      file: savedFile,
+    });
+  } catch (err) {
+    console.error('Campaign file upload error:', err.message);
+
+    // Clean up a file if an unexpected error occurred after upload
+    if (uploadedPath) {
+      await supabase.storage
+        .from('campaign-files')
+        .remove([uploadedPath])
+        .catch(() => {});
+    }
+
+    return res.status(500).json({
+      error: 'Internal server error',
+    });
+  }
 };
+
 
 // FR-09: Post campaign update
 const postUpdate = async (req, res) => {
