@@ -20,13 +20,19 @@ const sendVerificationEmail = async (email, token) => {
 };
 
 const sendPasswordResetEmail = async (email, token) => {
-  const url = `${process.env.CLIENT_URL}/reset-password?token=${token}`;
-  return await transporter.sendMail({
+  const url = new URL('/reset-password', process.env.CLIENT_URL);
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Invalid frontend URL');
+  // Fragments are not sent to the frontend server or included in referrers.
+  url.hash = new URLSearchParams({ token }).toString();
+  const info = await transporter.sendMail({
     from: process.env.EMAIL_FROM || 'noreply@microdonation.dev',
     to: email,
     subject: 'Reset your password — Micro Donation Platform',
-    html: `<p>Click <a href="${url}">here</a> to reset your password. Link expires in 1 hour.</p>`,
+    text: `Reset your password: ${url.href}\nThis link expires in 1 hour and can only be used once. If you did not request this, ignore this email.`,
+    html: `<p>Click <a href="${url.href}">here</a> to reset your password. This link expires in 1 hour and can only be used once.</p><p>If you did not request this, ignore this email.</p>`,
   });
+  if (!info?.accepted?.length || info.rejected?.length) throw new Error('Reset email not accepted');
+  return info;
 };
 
 const sendReceiptEmail = async (

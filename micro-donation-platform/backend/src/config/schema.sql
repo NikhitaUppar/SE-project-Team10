@@ -1,6 +1,7 @@
 -- ============================================================
 -- Micro Donation Platform — Supabase Schema
 -- Run this in your Supabase SQL editor
+-- Then apply migrations/006_password_reset.sql before using password reset.
 -- ============================================================
 
 -- Users
