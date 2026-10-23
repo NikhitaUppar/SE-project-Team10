@@ -20,7 +20,7 @@ router.post('/login', login);
 router.get('/me', authenticate, (req, res) => res.json({ user: req.user }));
 router.get('/verify/:token', verifyEmail);
 router.post('/resend-verification', createPasswordResetLimiter({ limit: 5 }), resendVerification);
-router.post('/forgot-password', forgotPassword);
-router.post('/reset-password', resetPassword);
+router.post('/forgot-password', createPasswordResetLimiter({ limit: 5 }), forgotPassword);
+router.post('/reset-password', createPasswordResetLimiter({ limit: 20 }), resetPassword);
 
 module.exports = router;

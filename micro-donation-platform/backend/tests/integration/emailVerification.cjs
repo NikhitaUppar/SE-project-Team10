@@ -27,6 +27,7 @@ before(async () => {
   // Supabase's backend role already has these user-table privileges.
   await db.exec('GRANT USAGE ON SCHEMA public TO service_role; GRANT SELECT, INSERT, UPDATE ON public.users TO service_role;');
   await db.exec(migration);
+  await db.exec(fs.readFileSync(path.join(__dirname, '../../src/config/migrations/006_password_reset.sql'), 'utf8'));
   postgrest = await startTestPostgrest(db);
   smtp = await startLocalSmtp();
   // These settings exist only in this child test process, never in a .env file.

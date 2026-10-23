@@ -48,3 +48,6 @@ Issue #5 adds email verification to registration; see `ISSUE_5_EMAIL_VERIFICATIO
 for its required database migration and SMTP setup. Newly registered accounts
 must follow their email link before logging in. Password reset, campaign
 updates, and auto-close remain separate TODOs assigned to `harishreddy2005`.
+
+After issue #6, login JWTs also carry `auth_version`; password reset increments
+that version, and middleware rejects earlier sessions.

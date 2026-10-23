@@ -22,3 +22,21 @@
 Validation: 11 backend suites / 133 tests passed for this branch alone.
 The frontend production build passed. The full combined development branch
 previously passed 174 tests and the user confirmed Gmail OTP delivery.
+
+## 2026-10-24: Issue #6 replacement PR (based on issue #5)
+
+- Adds forgot/reset-password APIs and Gmail reset links with a one-hour expiry,
+  hashed tokens, cooldown, and transactional single-use consumption.
+- Adds the #6 database migration for password reset and user auth_version.
+- Updates the login controller and middleware originally introduced for #4:
+  password reset invalidates old JWT sessions as well as the old password.
+- Adds forgot/reset pages and routing; uses #5's shared eye control on the new
+  password and confirmation fields, and adds the login-page reset link.
+- Adds reset unit/integration tests and combined OTP/verification/reset checks.
+- Replaces proposed password-reset changes in PR #28. Review and merge the
+  issue #5 PR first, then retarget this PR to main before merging it.
+- The final application source matches the tested combined development branch;
+  the PR descriptions document the updates to existing #3/#4 files.
+
+Validation for issue #6: 13 backend suites / 174 tests passed, including the
+combined verification/reset integration flows. The frontend build passed.
