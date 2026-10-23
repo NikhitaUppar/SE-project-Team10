@@ -81,6 +81,9 @@ export default function Login() {
         className="mt-4 text-sm text-indigo-600 hover:underline disabled:opacity-60">
         Resend verification email
       </button>
+      <Link to="/forgot-password" className="mt-4 ml-4 inline-block text-sm text-indigo-600 hover:underline">
+        Forgot password?
+      </Link>
       <p className="mt-5 text-center text-sm text-gray-600">
         Need an account? <Link to="/register" className="text-indigo-600 hover:underline">Sign up</Link>
       </p>
