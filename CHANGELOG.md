@@ -1,5 +1,24 @@
 # Project change record
 
+## Replacement pull requests created on 2026-10-24
+
+- Issue #5: [PR #30](https://github.com/NikhitaUppar/SE-project-Team10/pull/30),
+  branch `feature/5-otp-gmail-verification`, targeting `main`. Includes OTP/Gmail
+  verification and the related registration/login changes from issues #3/#4.
+  Its isolated validation passed 133 tests and the frontend build.
+- Issue #6: [PR #31](https://github.com/NikhitaUppar/SE-project-Team10/pull/31),
+  branch `feature/6-gmail-password-reset`, initially targeting the issue #5
+  branch. Includes reset links, reset-page eye controls, and issue #4 login/JWT
+  session invalidation changes. The full branch passed 174 tests and its build.
+- Merge PR #30 first; then update PR #31 onto merged `main` and change its base
+  to `main` before merging it. A squash/rebase merge of #30 requires updating
+  the second branch's ancestry to keep its diff focused.
+- Older PRs #26 and #28 were not closed or merged. The author can close them
+  as superseded by #30 and #31. Issues #3 and #4 remain closed.
+- The original combined development history and full chronological change
+  record are preserved on `feature/6-password-reset` at `7afb514`. No private
+  `.env` files or Gmail/Supabase credentials were pushed.
+
 ## 2026-10-24: Issue #5 replacement PR
 
 - Implements OTP verification before password creation, with five-minute codes,
