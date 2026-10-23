@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
+import PasswordInput from '../components/common/PasswordInput';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -66,9 +67,8 @@ export default function Login() {
         </div>
         <div>
           <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
-          <input id="password" name="password" type="password" autoComplete="current-password" required
-            value={password} onChange={(event) => setPassword(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" />
+          <PasswordInput id="password" name="password" autoComplete="current-password" required
+            value={password} onChange={(event) => setPassword(event.target.value)} />
         </div>
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
         {notice && <p role="status" className="text-sm text-green-700">{notice}</p>}
