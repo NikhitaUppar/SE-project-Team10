@@ -10,6 +10,12 @@ const { sendVerificationEmail } = require('../src/controllers/emailController');
 const authRoutes = require('../src/routes/auth');
 
 const app = express();
+let clientNumber = 0;
+app.set('trust proxy', 1);
+app.use((req, res, next) => {
+  req.headers['x-forwarded-for'] = `192.0.2.${clientNumber}`;
+  next();
+});
 app.use(express.json());
 app.use('/api/auth', authRoutes);
 const token = 'ab'.repeat(32);
@@ -28,6 +34,7 @@ function mockAccount(data = account, error = null) {
 }
 
 beforeEach(() => {
+  clientNumber += 1;
   jest.clearAllMocks();
   mockAccount();
   supabase.rpc.mockReset().mockResolvedValue({ data: 'created', error: null });

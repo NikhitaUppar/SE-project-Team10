@@ -12,6 +12,9 @@
 
 ## Setup
 
+For local development with real Gmail SMTP delivery, follow
+[Local development](micro-donation-platform/LOCAL_DEVELOPMENT.md).
+
 ### Prerequisites
 - Node.js 20+
 - A free [Supabase](https://supabase.com) account

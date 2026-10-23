@@ -1,13 +1,32 @@
 const nodemailer = require('nodemailer');
 
+const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+const smtpPort = Number(process.env.SMTP_PORT) || 587;
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: Number(process.env.SMTP_PORT) || 587,
-  auth: {
+  host: smtpHost,
+  port: smtpPort,
+  secure: smtpPort === 465,
+  requireTLS: smtpHost === 'smtp.gmail.com' && smtpPort !== 465,
+  connectionTimeout: 15000,
+  greetingTimeout: 15000,
+  socketTimeout: 30000,
+  auth: process.env.SMTP_USER ? {
     user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
+    pass: smtpHost === 'smtp.gmail.com' ? (process.env.SMTP_PASS || '').replace(/\s/g, '') : process.env.SMTP_PASS,
+  } : undefined,
 });
+
+const sendSignupCode = async (email, code) => {
+  const info = await transporter.sendMail({
+    from: process.env.EMAIL_FROM || 'noreply@microdonation.dev',
+    to: email,
+    subject: 'Your MicroDonate verification code',
+    text: `Your verification code is: ${code}\nEnter this code on the signup page. It expires in 5 minutes. If you did not request it, ignore this email.`,
+    html: `<p>Your verification code is:</p><p style="font-size:32px;letter-spacing:6px;font-weight:bold">${code}</p><p>Enter it on the signup page. It expires in 5 minutes.</p><p>If you did not request it, ignore this email.</p>`,
+  });
+  if (!info?.accepted?.length || info.rejected?.length) throw new Error('Signup email not accepted');
+  return info;
+};
 
 const sendVerificationEmail = async (email, token) => {
   const url = new URL('/verify-email', process.env.CLIENT_URL);
@@ -201,6 +220,7 @@ Thank you for your generous contribution.
 
 module.exports = {
   transporter,
+  sendSignupCode,
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendReceiptEmail,

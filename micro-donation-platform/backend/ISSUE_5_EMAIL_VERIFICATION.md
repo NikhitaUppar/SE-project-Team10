@@ -1,8 +1,39 @@
 # Issue #5: email verification on registration (FR-03)
 
+## Current signup flow: code before password
+
+New signups enter a display name and email, request a six-digit code, verify
+it on the signup page, and only then choose a password and create the account.
+The password fields have accessible show/hide eye controls. Nodemailer sends
+the code through the configured SMTP sender. The app now uses Gmail delivery;
+the frontend flow is unchanged, and users read codes in their own inboxes.
+
+- `POST /api/auth/signup/send-code`: validates the name/email, rejects existing
+  accounts, and sends a five-minute code. No user is created at this point.
+- `POST /api/auth/signup/verify-code`: allows five incorrect attempts, consumes
+  the code, and issues a random email-bound signup proof valid for ten minutes.
+- `POST /api/auth/signup/complete`: checks the single-use proof and password,
+  then inserts a verified user with a bcrypt cost-12 password hash. The stored
+  name comes from the original code request, and the user role uses its donor
+  database default.
+
+Codes/proofs are stored as keyed digests in a bounded per-process map. Resends
+invalidate earlier codes/proofs and have a one-minute cooldown. All three
+routes have IP limits. Raw codes are sent only by email; they are not returned
+by the send API or logged. Restarting the local backend expires pending
+signups, so request another code afterward. No new database migration is
+needed. Persistent shared storage would be needed for a multi-process deployment.
+
+The link-based endpoints documented below remain for older unverified accounts
+and existing API clients. The new signup page uses the code endpoints above.
+
 Registration and login continue using the existing Supabase `public.users`
 table, bcrypt hashes, and custom JWT middleware. This does not introduce
 Supabase Auth or a second user store.
+
+This replacement PR implements issue #5. Apply
+`005_email_verification.sql`; issue #6 adds its own separate migration later. Existing unverified users can use the login
+page's resend button after SMTP is configured.
 
 ## Database setup required before running against Supabase
 
@@ -29,6 +60,10 @@ from registration/resend APIs, or written to application logs.
 
 ## Local environment
 
+Use the Gmail SMTP setup described in `../LOCAL_DEVELOPMENT.md`. The environment
+example defaults to `smtp.gmail.com:587`; configure the sender address and app
+password privately. Gmail is the selected provider, not an SRS requirement.
+
 Configure `backend/.env` privately using `backend/.env.example` as a reference:
 
 - `SUPABASE_URL`: the team's project URL.
@@ -40,13 +75,12 @@ Configure `backend/.env` privately using `backend/.env.example` as a reference:
 
 Keep `VITE_API_URL` in the frontend environment pointing to the backend `/api`.
 Do not put service keys, SMTP passwords, or JWT secrets in `VITE_*` variables.
-Use the project's existing Nodemailer transport (port 587 with STARTTLS for the
-example settings). SMTP acceptance means the server accepted the message;
-inbox delivery must be confirmed separately.
+Use the project's existing Nodemailer transport. Gmail connections on port 587
+require STARTTLS; port 465 uses implicit TLS. Users open their own Gmail inboxes
+to read OTPs. The local SMTP sink is retained only for separate development tests.
 
-The supplied project URL was set in the ignored local `.env`. Real backend
-keys and SMTP settings still need local configuration if they are placeholders.
-The migration has not been applied to the shared Supabase project by this change.
+The ignored local `.env` holds the private backend configuration. See the root
+`CHANGELOG.md` for the confirmed shared database migration and connection status.
 
 ## User flow and API
 

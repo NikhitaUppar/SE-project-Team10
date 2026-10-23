@@ -12,7 +12,7 @@ async function startTestPostgrest(db) {
   app.get('/rest/v1/users', async (req, res) => {
     try {
       const columns = req.query.select.split(',').map((column) => {
-        if (!['id', 'email', 'password_hash', 'display_name', 'role', 'is_verified'].includes(column.trim())) {
+        if (!['id', 'email', 'password_hash', 'display_name', 'role', 'is_verified', 'auth_version'].includes(column.trim())) {
           throw new Error('Unexpected test column');
         }
         return column.trim();

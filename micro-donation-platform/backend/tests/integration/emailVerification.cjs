@@ -15,6 +15,7 @@ let db;
 let smtp;
 let postgrest;
 let app;
+let clientNumber = 0;
 const credentials = { email: 'verification@example.test', password: 'test-password-123' };
 const digest = (token) => crypto.createHash('sha256').update(token).digest('hex');
 const migration = fs.readFileSync(path.join(__dirname, '../../src/config/migrations/005_email_verification.sql'), 'utf8');
@@ -36,6 +37,11 @@ before(async () => {
     EMAIL_FROM: 'sender@example.test', NODE_ENV: 'test',
   });
   app = express();
+  app.set('trust proxy', 1);
+  app.use((req, res, next) => {
+    req.headers['x-forwarded-for'] = `192.0.2.${clientNumber}`;
+    next();
+  });
   app.use(express.json());
   app.use('/api/auth', require('../../src/routes/auth'));
 });
@@ -47,6 +53,7 @@ after(async () => {
 });
 
 beforeEach(async () => {
+  clientNumber += 1;
   await db.exec('TRUNCATE public.users CASCADE;');
   smtp.messages.length = 0;
   smtp.rejectRecipients(false);
@@ -67,6 +74,30 @@ function capturedToken() {
 }
 
 const verify = (token) => request(app).get(`/api/auth/verify/${token}`).set('Accept', 'application/json');
+
+test('signup OTP arrives over SMTP before a user exists, then verification allows password creation and login', async () => {
+  const email = 'otp-signup@example.test';
+  const post = (path, body) => request(app).post('/api/auth/signup/' + path).send(body);
+  const sent = await post('send-code', { email, display_name: 'OTP Student' });
+  assert.equal(sent.status, 200);
+  assert.equal((await db.query('SELECT count(*)::int AS count FROM public.users')).rows[0].count, 0);
+  const message = smtp.messages.at(-1).replace(/=\r?\n/g, '').replace(/=3D/g, '=');
+  const code = message.match(/Your verification code is: (\d{6})/)[1];
+  assert.ok(!JSON.stringify(sent.body).includes(code));
+  const checked = await post('verify-code', { email, code });
+  assert.equal(checked.status, 200);
+  assert.equal((await db.query('SELECT count(*)::int AS count FROM public.users')).rows[0].count, 0);
+  const created = await post('complete', { email, verification_token: checked.body.verification_token, password: credentials.password });
+  assert.equal(created.status, 201);
+  const user = (await db.query('SELECT * FROM public.users')).rows[0];
+  assert.equal(user.is_verified, true);
+  assert.equal(user.display_name, 'OTP Student');
+  assert.equal(bcrypt.getRounds(user.password_hash), 12);
+  const login = await request(app).post('/api/auth/login').send({ email, password: credentials.password });
+  assert.equal(login.status, 200);
+  assert.equal((await request(app).get('/api/auth/me').set('Authorization', `Bearer ${login.body.token}`)).status, 200);
+  assert.equal((await post('complete', { email, verification_token: checked.body.verification_token, password: credentials.password })).status, 400);
+});
 
 test('register → real Nodemailer/local SMTP → verification SQL → JWT login and protected route', async () => {
   const response = await request(app).post('/api/auth/register')
