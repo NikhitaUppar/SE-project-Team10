@@ -2,17 +2,113 @@ const supabase = require('../config/supabase');
 
 // FR-16, FR-17: Get all active campaigns (public)
 const getCampaigns = async (req, res) => {
-  // TODO (ramithanayak98-ar): Implement
-  // 1. Query 'campaigns' table where status='active'
-  // 2. Support ?category= filter
-  // 3. Return paginated results with progress %
-  res.status(501).json({ error: 'Not implemented yet' });
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 9));
+    const offset = (page - 1) * limit;
+    const { category, search, status } = req.query;
+
+    // Build Supabase query - default to 'active' campaigns for public browse
+    let query = supabase
+      .from('campaigns')
+      .select('*, campaign_files(file_url, file_type)', { count: 'exact' });
+
+    if (status) {
+      query = query.eq('status', status);
+    } else {
+      query = query.eq('status', 'active');
+    }
+
+    // Filter by category query param if specified (FR-17)
+    if (category && category !== 'All' && category !== 'all') {
+      query = query.eq('category', category);
+    }
+
+    // Optional title search filter
+    if (search && search.trim()) {
+      query = query.ilike('title', `%${search.trim()}%`);
+    }
+
+    // Order by newest first and paginate
+    query = query
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    const { data, count, error } = await query;
+
+    if (error) {
+      console.error('Error fetching campaigns:', error.message);
+      return res.status(500).json({ error: 'Failed to fetch campaigns' });
+    }
+
+    const total = count !== null && count !== undefined ? count : (data ? data.length : 0);
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
+    // Calculate real-time % progress and extract thumbnail image
+    const campaigns = (data || []).map((campaign) => {
+      const goal = Number(campaign.goal_amount) || 0;
+      const raised = Number(campaign.raised_amount) || 0;
+      const progress_percentage = goal > 0 ? Math.min(100, Math.round((raised / goal) * 100)) : 0;
+      const imageFile = campaign.campaign_files?.find((f) => f.file_type?.startsWith('image/'));
+      const image_url = imageFile ? imageFile.file_url : null;
+
+      return {
+        ...campaign,
+        progress_percentage,
+        image_url,
+      };
+    });
+
+    return res.status(200).json({
+      campaigns,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
+    });
+  } catch (err) {
+    console.error('getCampaigns unexpected error:', err.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 };
 
 // Get single campaign
 const getCampaignById = async (req, res) => {
-  // TODO (ramithanayak98-ar): Implement
-  res.status(501).json({ error: 'Not implemented yet' });
+  try {
+    const { id } = req.params;
+
+    const { data: campaign, error } = await supabase
+      .from('campaigns')
+      .select('*, campaign_files(file_url, file_type)')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching campaign by id:', error.message);
+      return res.status(500).json({ error: 'Failed to fetch campaign' });
+    }
+
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    const goal = Number(campaign.goal_amount) || 0;
+    const raised = Number(campaign.raised_amount) || 0;
+    const progress_percentage = goal > 0 ? Math.min(100, Math.round((raised / goal) * 100)) : 0;
+    const imageFile = campaign.campaign_files?.find((f) => f.file_type?.startsWith('image/'));
+    const image_url = imageFile ? imageFile.file_url : null;
+
+    return res.status(200).json({
+      ...campaign,
+      progress_percentage,
+      image_url,
+    });
+  } catch (err) {
+    console.error('getCampaignById unexpected error:', err.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 };
 
 // FR-06: Create campaign
