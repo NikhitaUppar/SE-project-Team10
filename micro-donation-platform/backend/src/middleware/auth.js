@@ -16,14 +16,19 @@ const authenticate = async (req, res, next) => {
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, email, role, display_name, is_verified')
+      .select('id, email, role, display_name, is_verified, auth_version')
       .eq('id', decoded.id)
       .single();
 
     if (error || !user || !user.is_verified) {
       return res.status(401).json({ error: 'Invalid token' });
     }
-    req.user = user;
+    const tokenVersion = decoded.auth_version ?? 0;
+    if (!Number.isInteger(tokenVersion) || tokenVersion < 0 || tokenVersion !== (user.auth_version ?? 0)) {
+      return res.status(401).json({ error: 'Session expired. Please log in again.' });
+    }
+    const { auth_version, ...publicUser } = user;
+    req.user = publicUser;
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Token expired or invalid' });

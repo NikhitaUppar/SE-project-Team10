@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MicroDonate · Local inbox</title>
+  <style>
+    body { margin: 0; background: #f5f6fa; color: #202638; font: 16px/1.6 system-ui, sans-serif; }
+    main { max-width: 900px; margin: 40px auto; padding: 0 20px; }
+    h1 { margin-bottom: 0; } h2 { font-size: 20px; margin: 0; }
+    .muted { color: #616a7c; } article { background: white; border: 1px solid #dde1eb; border-radius: 12px; padding: 24px; margin: 20px 0; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+    a { display: block; color: #4338ca; overflow-wrap: anywhere; margin-top: 12px; }
+    #status { margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Local inbox</h1>
+    <p class="muted">Verification links, password resets, and receipts for your MicroDonate demo appear here. Emails stay on this computer and disappear when the inbox restarts.</p>
+    <a href="http://localhost:5173/login">Open MicroDonate</a>
+    <p id="status" role="status">Loading emails…</p>
+    <section id="messages" aria-label="Received emails"></section>
+  </main>
+  <script>
+    let previous = '';
+    async function refresh() {
+      try {
+        const response = await fetch('/api/messages');
+        if (!response.ok) throw new Error();
+        const messages = await response.json();
+        document.querySelector('#status').textContent = messages.length ? `${messages.length} email(s) · Updates automatically` : 'No emails yet. Sign up or resend verification from the login page.';
+        const signature = messages.map(message => message.id).join(',');
+        if (signature === previous) return;
+        previous = signature;
+        const container = document.querySelector('#messages');
+        container.replaceChildren();
+        for (const message of messages) {
+          const article = document.createElement('article');
+          const title = document.createElement('h2');
+          title.textContent = message.subject;
+          const meta = document.createElement('p');
+          meta.className = 'muted';
+          meta.textContent = `To: ${message.to} · From: ${message.from} · ${new Date(message.receivedAt).toLocaleString()}`;
+          const body = document.createElement('pre');
+          body.textContent = message.text;
+          article.append(title, meta, body);
+          // Render text safely; never execute email HTML.
+          for (const url of new Set(message.text.match(/https?:\/\/[^\s<>"\[\]]+/g) || [])) {
+            const link = document.createElement('a');
+            link.href = url;
+            link.textContent = url.includes('/verify-email') ? 'Open verification link' : url.includes('/reset-password') ? 'Open password reset link' : 'Open link';
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            article.append(link);
+          }
+          container.append(article);
+        }
+      } catch {
+        document.querySelector('#status').textContent = 'Inbox is unavailable. Start it with npm run dev:mail in the backend folder.';
+      }
+    }
+    refresh();
+    setInterval(refresh, 2000);
+  </script>
+</body>
+</html>

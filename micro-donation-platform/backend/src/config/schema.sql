@@ -1,6 +1,7 @@
 -- ============================================================
 -- Micro Donation Platform — Supabase Schema
 -- Run this in your Supabase SQL editor
+-- Then apply migrations/005_email_verification.sql and migrations/006_password_reset.sql.
 -- ============================================================
 
 -- Users
