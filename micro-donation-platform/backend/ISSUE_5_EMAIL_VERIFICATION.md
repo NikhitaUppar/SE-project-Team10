@@ -31,8 +31,9 @@ Registration and login continue using the existing Supabase `public.users`
 table, bcrypt hashes, and custom JWT middleware. This does not introduce
 Supabase Auth or a second user store.
 
-This replacement PR implements issue #5. Apply
-`005_email_verification.sql`; issue #6 adds its own separate migration later. Existing unverified users can use the login
+This implementation is integrated into the password-reset working copy.
+Apply both migrations `005_email_verification.sql` and `006_password_reset.sql`
+for the combined application. Existing unverified users can use the login
 page's resend button after SMTP is configured.
 
 ## Database setup required before running against Supabase
