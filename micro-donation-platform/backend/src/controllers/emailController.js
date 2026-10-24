@@ -1,32 +1,63 @@
 const nodemailer = require('nodemailer');
 
+const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+const smtpPort = Number(process.env.SMTP_PORT) || 587;
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: Number(process.env.SMTP_PORT) || 587,
-  auth: {
+  host: smtpHost,
+  port: smtpPort,
+  secure: smtpPort === 465,
+  requireTLS: smtpHost === 'smtp.gmail.com' && smtpPort !== 465,
+  connectionTimeout: 15000,
+  greetingTimeout: 15000,
+  socketTimeout: 30000,
+  auth: process.env.SMTP_USER ? {
     user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
+    pass: smtpHost === 'smtp.gmail.com' ? (process.env.SMTP_PASS || '').replace(/\s/g, '') : process.env.SMTP_PASS,
+  } : undefined,
 });
 
+const sendSignupCode = async (email, code) => {
+  const info = await transporter.sendMail({
+    from: process.env.EMAIL_FROM || 'noreply@microdonation.dev',
+    to: email,
+    subject: 'Your MicroDonate verification code',
+    text: `Your verification code is: ${code}\nEnter this code on the signup page. It expires in 5 minutes. If you did not request it, ignore this email.`,
+    html: `<p>Your verification code is:</p><p style="font-size:32px;letter-spacing:6px;font-weight:bold">${code}</p><p>Enter it on the signup page. It expires in 5 minutes.</p><p>If you did not request it, ignore this email.</p>`,
+  });
+  if (!info?.accepted?.length || info.rejected?.length) throw new Error('Signup email not accepted');
+  return info;
+};
+
 const sendVerificationEmail = async (email, token) => {
-  const url = `${process.env.CLIENT_URL}/verify-email?token=${token}`;
-  return await transporter.sendMail({
+  const url = new URL('/verify-email', process.env.CLIENT_URL);
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Invalid frontend URL');
+  // The fragment is not sent to the frontend web server or in Referer headers.
+  url.hash = new URLSearchParams({ token }).toString();
+  const info = await transporter.sendMail({
     from: process.env.EMAIL_FROM || 'noreply@microdonation.dev',
     to: email,
     subject: 'Verify your email — Micro Donation Platform',
-    html: `<p>Click <a href="${url}">here</a> to verify your email. Link expires in 24 hours.</p>`,
+    text: `Verify your email: ${url.href}\nThis link expires in 24 hours and can only be used once. If you did not create this account, ignore this email.`,
+    html: `<p>Click <a href="${url.href}">here</a> to verify your email. This link expires in 24 hours and can only be used once.</p><p>If you did not create this account, ignore this email.</p>`,
   });
+  if (!info?.accepted?.length || info.rejected?.length) throw new Error('Verification email not accepted');
+  return info;
 };
 
 const sendPasswordResetEmail = async (email, token) => {
-  const url = `${process.env.CLIENT_URL}/reset-password?token=${token}`;
-  return await transporter.sendMail({
+  const url = new URL('/reset-password', process.env.CLIENT_URL);
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Invalid frontend URL');
+  // Fragments are not sent to the frontend server or included in referrers.
+  url.hash = new URLSearchParams({ token }).toString();
+  const info = await transporter.sendMail({
     from: process.env.EMAIL_FROM || 'noreply@microdonation.dev',
     to: email,
     subject: 'Reset your password — Micro Donation Platform',
-    html: `<p>Click <a href="${url}">here</a> to reset your password. Link expires in 1 hour.</p>`,
+    text: `Reset your password: ${url.href}\nThis link expires in 1 hour and can only be used once. If you did not request this, ignore this email.`,
+    html: `<p>Click <a href="${url.href}">here</a> to reset your password. This link expires in 1 hour and can only be used once.</p><p>If you did not request this, ignore this email.</p>`,
   });
+  if (!info?.accepted?.length || info.rejected?.length) throw new Error('Reset email not accepted');
+  return info;
 };
 
 const sendReceiptEmail = async (
@@ -195,6 +226,7 @@ Thank you for your generous contribution.
 
 module.exports = {
   transporter,
+  sendSignupCode,
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendReceiptEmail,

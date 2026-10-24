@@ -1,10 +1,13 @@
 jest.mock('../config/supabase', () => ({
   from: jest.fn(),
+  rpc: jest.fn(),
 }));
+jest.mock('./emailController', () => ({ sendVerificationEmail: jest.fn() }));
 
 const bcrypt = require('bcryptjs');
 const supabase = require('../config/supabase');
 const { register } = require('./authController');
+const { sendVerificationEmail } = require('./emailController');
 
 const validRequest = {
   display_name: 'Test Donor',
@@ -30,6 +33,8 @@ const mockDatabase = ({ existingUser = null, lookupError = null, insertError = n
 describe('register', () => {
   beforeEach(() => {
     supabase.from.mockReset();
+    supabase.rpc.mockReset().mockResolvedValue({ data: 'created', error: null });
+    sendVerificationEmail.mockReset().mockResolvedValue({ accepted: ['donor@example.com'] });
   });
 
   test.each([
@@ -73,7 +78,13 @@ describe('register', () => {
     expect(await bcrypt.compare(validRequest.password, insertedUser.password_hash)).toBe(true);
     expect(bcrypt.getRounds(insertedUser.password_hash)).toBe(12);
     expect(res.status).toHaveBeenCalledWith(201);
-    expect(res.json).toHaveBeenCalledWith({ message: 'Registration successful' });
+    expect(res.json).toHaveBeenCalledWith({
+      message: 'Registration successful. Check your email to verify your account before logging in.',
+    });
+    expect(supabase.rpc).toHaveBeenCalledWith('issue_email_verification_token', {
+      p_user_id: insertedUser.id, p_token_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    expect(sendVerificationEmail).toHaveBeenCalledWith('donor@example.com', expect.stringMatching(/^[a-f0-9]{64}$/));
   });
 
   it('returns 400 if a concurrent request creates the same email first', async () => {
