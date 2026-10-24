@@ -126,6 +126,23 @@ describe('Issue #4 login', () => {
 });
 
 describe('protected route authentication', () => {
+  test.each([undefined, 0, -1, '1', 2])('rejects a stale or invalid session version %s after password reset', async (version) => {
+    mockDatabase({ ...user, auth_version: 1 });
+    const claims = version === undefined ? { id: user.id } : { id: user.id, auth_version: version };
+    const token = jwt.sign(claims, secret, { expiresIn: '7d' });
+    const response = await request(app).get('/protected').set('Authorization', `Bearer ${token}`);
+    expect(response.status).toBe(401);
+  });
+
+  test('accepts the current session version without exposing internal version data', async () => {
+    mockDatabase({ ...user, auth_version: 1 });
+    const token = jwt.sign({ id: user.id, auth_version: 1 }, secret, { expiresIn: '7d' });
+    const response = await request(app).get('/protected').set('Authorization', `Bearer ${token}`);
+    expect(response.status).toBe(200);
+    expect(response.body.user).toEqual(publicUser);
+    expect(response.body.user).not.toHaveProperty('auth_version');
+  });
+
   test.each([
     undefined, 'Basic abc', 'Bearer ', 'Bearer malformed',
     `Bearer ${jwt.sign({ id: user.id }, 'wrong-secret', { expiresIn: '7d' })}`,
@@ -155,7 +172,7 @@ describe('protected route authentication', () => {
     const response = await request(app).get('/protected').set('Authorization', `Bearer ${token}`);
     expect(response.status).toBe(200);
     expect(response.body.user).toEqual(publicUser);
-    expect(select).toHaveBeenCalledWith('id, email, role, display_name, is_verified');
+    expect(select).toHaveBeenCalledWith('id, email, role, display_name, is_verified, auth_version');
     expect((await request(app).get('/admin').set('Authorization', `Bearer ${token}`)).status).toBe(403);
     mockDatabase({ ...user, role: 'admin' });
     expect((await request(app).get('/admin').set('Authorization', `Bearer ${token}`)).status).toBe(200);

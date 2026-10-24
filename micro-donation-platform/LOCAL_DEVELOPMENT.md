@@ -10,8 +10,9 @@ recipient's own inbox. The OTP signup frontend is unchanged.
 1. From `micro-donation-platform`, run `npm.cmd run install:all` on Windows.
 2. Copy `backend/.env.example` to `backend/.env` only if the local file does
    not already exist. Keep your existing Supabase URL and backend service key.
-3. For an existing Supabase database, apply the verification migration using SQL Editor:
-   `backend/src/config/migrations/005_email_verification.sql`. Do not rerun
+3. For an existing Supabase database, apply both migrations using SQL Editor:
+   `backend/src/config/migrations/005_email_verification.sql` and
+   `backend/src/config/migrations/006_password_reset.sql`. Do not rerun
    `schema.sql` on existing tables. For an empty database, run the schema first.
 4. Enable 2-Step Verification on the project's personal Gmail sender account.
    Generate an app password at <https://myaccount.google.com/apppasswords>.
@@ -54,7 +55,8 @@ the local inbox.
 3. After verification, choose your password and click **Create account**.
    The eye button shows or hides what you type. Your account is created only
    at this final step, with its email already verified. You can then log in.
-Password reset is implemented in the separate issue #6 PR, based on this branch.
+4. Test **Forgot password?** from the login page. Open the reset message in
+   the recipient's Gmail inbox, follow its link, choose a new password, and log in again.
 
 For an account created earlier, enter its email and password on the login
 page and click **Resend verification email** instead of signing up again.
