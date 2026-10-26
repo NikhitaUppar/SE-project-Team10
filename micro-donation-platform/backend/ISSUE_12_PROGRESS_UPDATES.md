@@ -154,7 +154,10 @@ the implemented creation API. Neither unrelated UI was rewritten. The manual
 walkthrough confirmed the owner UI; persistence was verified by the isolated
 PostgreSQL and browser checks rather than a shared remote progress write.
 
-## Prepared pull request
+## Pull request
+
+Created with the user's approval:
+[PR #39](https://github.com/NikhitaUppar/SE-project-Team10/pull/39), targeting `main`.
 
 Title: **[CAMPAIGN] Implement Campaign Progress Updates (FR-09)**
 
