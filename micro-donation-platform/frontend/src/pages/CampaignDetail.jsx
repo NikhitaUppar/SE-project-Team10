@@ -137,6 +137,17 @@ export default function CampaignDetail() {
             ...prev,
             raised_amount: (Number(prev?.raised_amount) || 0) + numericAmount,
           }));
+          setDonations((prev) => [
+            {
+              id: paymentId,
+              amount: numericAmount,
+              is_anonymous: Boolean(isAnonymous),
+              status: 'completed',
+              created_at: new Date().toISOString(),
+              donor_name: isAnonymous ? 'Anonymous' : (user?.display_name || 'Donor'),
+            },
+            ...prev,
+          ]);
           setIsSubmitting(false);
         },
         prefill: {
@@ -244,7 +255,7 @@ export default function CampaignDetail() {
                 Deadline: {campaign?.deadline ? new Date(campaign.deadline).toLocaleDateString() : 'Ongoing'}
               </span>
             </div>
-                   </div>
+          </div>
 
           {/* Recent Donations */}
           <div className="bg-white rounded-xl border border-gray-100 p-5 mt-6">
