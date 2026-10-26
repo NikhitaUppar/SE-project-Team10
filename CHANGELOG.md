@@ -25,6 +25,11 @@
   included in this branch. See `backend/ISSUE_12_PROGRESS_UPDATES.md` under
   `micro-donation-platform` for the complete file review and prepared PR text.
 - User confirmation is required before any push or PR creation for this issue.
+- Follow-up: the user approved a temporary shared-database owner/campaign for
+  manual local-app testing and confirmed the owner UI worked. The temporary
+  account and campaign were removed afterward, and no test updates remained.
+  Existing records were preserved. The user then approved pushing this branch
+  and creating the issue #12 PR; automatic merge remains unauthorized.
 
 ## Replacement pull requests created on 2026-10-24
 

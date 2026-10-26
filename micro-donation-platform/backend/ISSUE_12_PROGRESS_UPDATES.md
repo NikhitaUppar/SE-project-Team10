@@ -116,6 +116,11 @@ Checks executed on 2026-10-26:
   the existing campaign creation/upload unit tests also passed.
 - The app was started with `npm.cmd run dev` from `micro-donation-platform`.
   Backend health and frontend HTTP checks passed.
+- With the user's approval, created one temporary verified owner and active
+  campaign in shared Supabase for a manual local-app walkthrough. The user
+  confirmed the feature displayed correctly. Both records were then removed
+  and their absence verified; there were no remaining test updates. Existing
+  accounts/campaigns and private credentials were unchanged.
 - No lint script or ESLint configuration is present in this repository;
   no lint run is claimed. `git diff --check` checks patch whitespace.
 
@@ -145,8 +150,9 @@ and reload to verify persistence. Test inactive campaigns and invalid IDs as wel
 Existing limitations outside this issue: the signed-in navbar can overflow on
 narrow screens; the new progress section fits at 390px. The existing
 `CreateCampaign.jsx` is a placeholder; this issue's creation regression covers
-the implemented creation API. Neither unrelated UI was rewritten. Shared remote
-progress writes were not tested because they require the user's approval.
+the implemented creation API. Neither unrelated UI was rewritten. The manual
+walkthrough confirmed the owner UI; persistence was verified by the isolated
+PostgreSQL and browser checks rather than a shared remote progress write.
 
 ## Prepared pull request
 
@@ -167,5 +173,5 @@ Modified files and their purposes are listed above. Validation: 183 Jest tests,
 24 child PostgreSQL/JWT scenarios, frontend build, and isolated Chrome checks
 passed. No credentials, `.env` files, or shared database writes are included.
 
-The branch and PR must not be pushed/created until the user confirms. No automatic
+The user confirmed pushing and creating the PR on 2026-10-26. No automatic
 merge is authorized.
