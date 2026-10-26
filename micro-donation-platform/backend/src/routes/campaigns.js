@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requireRole } = require('../middleware/auth');
 
 const {
   getCampaigns,
@@ -10,6 +10,7 @@ const {
   createCampaign,
   uploadCampaignFile,
   postUpdate,
+  getCampaignUpdates,
   getCampaignStats,
 } = require('../controllers/campaignController');
 
@@ -57,6 +58,7 @@ const handleCampaignUpload = (req, res, next) => {
 
 router.get('/', getCampaigns);
 router.get('/:id', getCampaignById);
+router.get('/:id/updates', getCampaignUpdates);
 router.get('/:id/stats', authenticate, getCampaignStats);
 router.post('/', authenticate, createCampaign);
 router.post(
@@ -65,7 +67,7 @@ router.post(
   handleCampaignUpload,
   uploadCampaignFile
 );
-router.post('/:id/updates', authenticate, postUpdate);
+router.post('/:id/updates', authenticate, requireRole('campaign_owner'), postUpdate);
 
 module.exports = router;
 
