@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,9 @@ export default function CampaignDetail() {
 
   const [campaign, setCampaign] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [donations, setDonations] = useState([]);
+  const [donationsLoading, setDonationsLoading] = useState(true);
+  const [donationsError, setDonationsError] = useState('');
   const [amount, setAmount] = useState(100);
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,6 +42,38 @@ export default function CampaignDetail() {
     };
 
     fetchCampaign();
+  }, [id]);
+
+  // Fetch completed donations for this campaign
+  useEffect(() => {
+    let active = true;
+
+    const fetchDonations = async () => {
+      try {
+        const response = await api.get(`/campaigns/${id}/donations`);
+
+        if (active) {
+          setDonations(response.data.donations || []);
+          setDonationsError('');
+        }
+      } catch (err) {
+        if (active) {
+          setDonationsError(
+            err.response?.data?.error || 'Could not load recent donations.'
+          );
+        }
+      } finally {
+        if (active) {
+          setDonationsLoading(false);
+        }
+      }
+    };
+
+    fetchDonations();
+
+    return () => {
+      active = false;
+    };
   }, [id]);
 
   const handleDonate = async (e) => {
@@ -209,6 +244,57 @@ export default function CampaignDetail() {
                 Deadline: {campaign?.deadline ? new Date(campaign.deadline).toLocaleDateString() : 'Ongoing'}
               </span>
             </div>
+                   </div>
+
+          {/* Recent Donations */}
+          <div className="bg-white rounded-xl border border-gray-100 p-5 mt-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">
+              Recent Donations
+            </h2>
+
+            {donationsLoading && (
+              <p className="text-gray-500 text-sm">Loading donations...</p>
+            )}
+
+            {!donationsLoading && donationsError && (
+              <p className="text-red-600 text-sm">{donationsError}</p>
+            )}
+
+            {!donationsLoading &&
+              !donationsError &&
+              donations.length === 0 && (
+                <p className="text-gray-500 text-sm">
+                  No completed donations yet. Be the first to support this campaign!
+                </p>
+              )}
+
+            {!donationsLoading && !donationsError && donations.length > 0 && (
+              <div className="divide-y divide-gray-100">
+                {donations.map((donation) => (
+                  <div
+                    key={donation.id}
+                    className="flex items-center justify-between gap-4 py-3"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-800">
+                        {donation.is_anonymous
+                          ? 'Anonymous'
+                          : donation.donor_name || 'Donor'}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {donation.created_at
+                          ? new Date(donation.created_at).toLocaleDateString('en-IN')
+                          : ''}
+                      </p>
+                    </div>
+
+                    <span className="font-semibold text-indigo-600 whitespace-nowrap">
+                      ₹{Number(donation.amount || 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

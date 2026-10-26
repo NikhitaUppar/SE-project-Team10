@@ -355,10 +355,45 @@ const closePastDeadlineCampaigns = async () => {
   // 2. Update status to 'closed'
   console.log('[CRON] closePastDeadlineCampaigns — not implemented yet');
 };
+const getCampaignDonations = async (req, res) => {
+  try {
+    const { id } = req.params;
 
+    const { data, error } = await supabase
+      .from('donations')
+      .select('id, amount, is_anonymous, status, created_at, users(display_name)')
+      .eq('campaign_id', id)
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching campaign donations:', error.message);
+      return res.status(500).json({
+        error: 'Failed to fetch campaign donations',
+      });
+    }
+
+    const donations = (data || []).map((donation) => ({
+      id: donation.id,
+      amount: donation.amount,
+      is_anonymous: Boolean(donation.is_anonymous),
+      status: donation.status,
+      created_at: donation.created_at,
+      donor_name: donation.is_anonymous
+        ? 'Anonymous'
+        : donation.users?.display_name || 'Donor',
+    }));
+
+    return res.status(200).json({ donations });
+  } catch (err) {
+    console.error('getCampaignDonations unexpected error:', err.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
 module.exports = {
   getCampaigns,
   getCampaignById,
+  getCampaignDonations,
   createCampaign,
   uploadCampaignFile,
   postUpdate,
