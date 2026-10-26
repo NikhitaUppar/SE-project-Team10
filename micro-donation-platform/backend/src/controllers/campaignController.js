@@ -358,13 +358,15 @@ const closePastDeadlineCampaigns = async () => {
 const getCampaignDonations = async (req, res) => {
   try {
     const { id } = req.params;
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20));
 
     const { data, error } = await supabase
       .from('donations')
       .select('id, amount, is_anonymous, status, created_at, users(display_name)')
       .eq('campaign_id', id)
       .eq('status', 'completed')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(limit);
 
     if (error) {
       console.error('Error fetching campaign donations:', error.message);
