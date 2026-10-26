@@ -15,6 +15,9 @@
 For local development with real Gmail SMTP delivery, follow
 [Local development](micro-donation-platform/LOCAL_DEVELOPMENT.md).
 
+Campaign progress updates (issue #12), API rules, and test instructions are in
+[the progress updates guide](micro-donation-platform/backend/ISSUE_12_PROGRESS_UPDATES.md).
+
 ### Prerequisites
 - Node.js 20+
 - A free [Supabase](https://supabase.com) account

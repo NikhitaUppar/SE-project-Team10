@@ -332,11 +332,60 @@ const uploadCampaignFile = async (req, res) => {
 
 
 // FR-09: Post campaign update
+const validCampaignId = (id) => typeof id === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+const updateFields = 'id, campaign_id, content, created_at';
+
+// Public, like the existing campaign detail endpoint; includes past updates
+// on closed campaigns. A stable secondary order resolves timestamp ties.
+const getCampaignUpdates = async (req, res) => {
+  if (!validCampaignId(req.params.id)) {
+    return res.status(400).json({ error: 'Invalid campaign ID' });
+  }
+  try {
+    const { data: campaign, error: campaignError } = await supabase.from('campaigns')
+      .select('id').eq('id', req.params.id).maybeSingle();
+    if (campaignError) return res.status(500).json({ error: 'Unable to load campaign updates' });
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+    const { data, error } = await supabase.from('campaign_updates')
+      .select(updateFields).eq('campaign_id', campaign.id)
+      .order('created_at', { ascending: true }).order('id', { ascending: true });
+    if (error) return res.status(500).json({ error: 'Unable to load campaign updates' });
+    return res.json({ updates: data || [] });
+  } catch {
+    return res.status(500).json({ error: 'Unable to load campaign updates' });
+  }
+};
+
 const postUpdate = async (req, res) => {
-  // TODO (harishreddy2005): Implement
-  // 1. Verify req.user.id === campaign.owner_id
-  // 2. Insert into 'campaign_updates' table
-  res.status(501).json({ error: 'Not implemented yet' });
+  if (!validCampaignId(req.params.id)) {
+    return res.status(400).json({ error: 'Invalid campaign ID' });
+  }
+  const content = req.body?.content;
+  if (typeof content !== 'string' || !content.trim() || content.trim().length > 5000) {
+    return res.status(400).json({ error: 'Update text must contain 1 to 5000 characters' });
+  }
+  try {
+    const { data: campaign, error: campaignError } = await supabase.from('campaigns')
+      .select('id, owner_id, status').eq('id', req.params.id).maybeSingle();
+    if (campaignError) return res.status(500).json({ error: 'Unable to post campaign update' });
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+    if (campaign.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'You can only post updates to your own campaign' });
+    }
+    if (campaign.status !== 'active') {
+      return res.status(409).json({ error: 'Progress updates can only be posted on active campaigns' });
+    }
+    // Identity is established by authenticate/requireRole and campaign ownership.
+    // UUID and creation time use database defaults, never frontend-supplied values.
+    const { data, error } = await supabase.from('campaign_updates')
+      .insert({ campaign_id: campaign.id, content: content.trim() })
+      .select(updateFields).single();
+    if (error || !data) return res.status(500).json({ error: 'Unable to post campaign update' });
+    return res.status(201).json({ message: 'Progress update posted', update: data });
+  } catch {
+    return res.status(500).json({ error: 'Unable to post campaign update' });
+  }
 };
 
 // FR-20: Get campaign stats (owner only)
@@ -362,6 +411,7 @@ module.exports = {
   createCampaign,
   uploadCampaignFile,
   postUpdate,
+  getCampaignUpdates,
   getCampaignStats,
   closePastDeadlineCampaigns,
 };
