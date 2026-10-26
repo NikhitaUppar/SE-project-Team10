@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 
 export default function CampaignCard({ campaign }) {
   const [imgError, setImgError] = useState(false);
+  const canDonate = campaign?.accepting_donations === true;
 
   const goal = Number(campaign?.goal_amount) || 0;
   const raised = Number(campaign?.raised_amount) || 0;
@@ -69,7 +70,7 @@ export default function CampaignCard({ campaign }) {
         </span>
 
         {/* Status Pill Badge */}
-        <span className="absolute top-3 right-3 bg-emerald-500/90 text-white text-xs font-medium px-2.5 py-1 rounded-full shadow-sm capitalize">
+        <span className={`absolute top-3 right-3 ${canDonate ? 'bg-emerald-500/90' : 'bg-gray-500/90'} text-white text-xs font-medium px-2.5 py-1 rounded-full shadow-sm capitalize`}>
           {campaign?.status || 'Active'}
         </span>
       </div>
@@ -137,7 +138,7 @@ export default function CampaignCard({ campaign }) {
               className="w-full block text-center bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white font-medium py-2.5 px-4 rounded-lg transition-colors duration-200 text-sm shadow-sm"
               id={`donate-btn-${campaign?.id}`}
             >
-              Donate Now
+              {canDonate ? 'Donate Now' : 'View Campaign'}
             </Link>
           </div>
         </div>

@@ -2,6 +2,7 @@ const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const supabase = require('../config/supabase');
 const emailController = require('./emailController');
+const { canAcceptDonations } = require('../services/campaignLifecycle');
 
 // Ensure Razorpay instance is safely initialized
 const razorpay = new Razorpay({
@@ -34,26 +35,14 @@ const createOrder = async (req, res) => {
       return res.status(400).json({ error: 'Campaign ID is required' });
     }
 
-    // 2. Check campaign exists and is active
-    let campaign = null;
-    if (isSupabaseConfigured()) {
-      try {
-        const { data, error } = await supabase
-          .from('campaigns')
-          .select('*')
-          .eq('id', campaign_id)
-          .single();
-
-        if (!error && data) {
-          campaign = data;
-        }
-      } catch (dbErr) {
-        console.warn('Notice: Could not check campaign in database:', dbErr.message);
-      }
-    }
-
-    if (campaign && campaign.status !== 'active') {
-      return res.status(400).json({ error: 'Campaign is not currently active' });
+    // Always check the authoritative campaign, including in test/demo mode.
+    // A database failure must not fall through to creating a payment order.
+    const { data: campaign, error: campaignError } = await supabase.from('campaigns')
+      .select('id, status, deadline').eq('id', campaign_id).maybeSingle();
+    if (campaignError) return res.status(503).json({ error: 'Unable to check campaign availability' });
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+    if (!canAcceptDonations(campaign)) {
+      return res.status(409).json({ error: 'Campaign is not accepting donations' });
     }
 
     // 3. Create Razorpay order

@@ -1,5 +1,32 @@
 # Project change record
 
+## 2026-10-26: Issue #13 auto-close campaigns past deadline (FR-10)
+
+- Created `feature/13-auto-close-campaigns` from fetched, fast-forwarded main
+  at `509d358`. The unmerged issue #12 branch and PR were preserved.
+- Implemented a single conditional status-only update for active campaigns
+  strictly past their timezone-aware deadlines. Already-closed and other
+  non-active statuses, campaign details, donations, and progress records stay intact.
+- Replaced the scheduler TODO with daily midnight execution in Asia/Kolkata,
+  optional `CAMPAIGN_CRON_TIMEZONE`, startup catch-up, overlap prevention,
+  sanitized failure logging, and retry on the next daily run.
+- Centralized lifecycle rules and exposed effective closed/availability states.
+  Active browsing filters expired rows before pagination; new donation orders
+  always check status/deadline and fail closed when the database is unavailable.
+  Existing captured-payment confirmation/webhook bookkeeping remains unchanged.
+- Updated detail/card donation controls to use backend availability. API checks
+  still block a stale browser page after a deadline has passed.
+- Added policy, scheduler, startup, PostgreSQL integration, and optional browser
+  tests. Validation passed 17 suites / 210 Jest tests, 10 child PostgreSQL cases,
+  frontend build, and isolated Chrome checks. No lint command is configured.
+- No migration, new dependency, private environment change, real payment/email,
+  or shared campaign update was needed. The live backend was stopped during
+  testing so the new startup catch-up would not mutate team records unexpectedly.
+- See `micro-donation-platform/backend/ISSUE_13_AUTO_CLOSE.md` for the complete
+  file review, boundary/financial rules, deployment requirements, and PR draft
+  using the exact issue title. The feature branch push is authorized; merging
+  requires the user's confirmation.
+
 ## Replacement pull requests created on 2026-10-24
 
 - Issue #5: [PR #30](https://github.com/NikhitaUppar/SE-project-Team10/pull/30),

@@ -142,6 +142,7 @@ describe('Campaign Browsing API (getCampaigns)', () => {
       select: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
       ilike: jest.fn().mockReturnThis(),
+      gte: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
       range: jest.fn(),
     };

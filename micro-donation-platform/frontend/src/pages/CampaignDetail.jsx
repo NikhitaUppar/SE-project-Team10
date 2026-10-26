@@ -14,6 +14,7 @@ export default function CampaignDetail() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(null);
+  const canDonate = campaign?.accepting_donations === true;
 
   useEffect(() => {
     const fetchCampaign = async () => {
@@ -44,6 +45,10 @@ export default function CampaignDetail() {
   const handleDonate = async (e) => {
     e.preventDefault();
     setError('');
+    if (!canDonate) {
+      setError('This campaign is not accepting donations.');
+      return;
+    }
 
     const numericAmount = Number(amount);
     if (!numericAmount || numericAmount < 1 || numericAmount > 500) {
@@ -173,7 +178,7 @@ export default function CampaignDetail() {
                   : 'bg-gray-100 text-gray-600'
               }`}
             >
-              {campaign?.status === 'active' ? 'Active' : 'Closed'}
+              {campaign?.status?.replace(/_/g, ' ') || 'Unavailable'}
             </span>
           </div>
 
@@ -215,7 +220,7 @@ export default function CampaignDetail() {
         {/* Donation Card */}
         <div className="md:col-span-1">
           <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 sticky top-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-1">Make a Micro-Donation</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-1">{canDonate ? 'Make a Micro-Donation' : 'Donations unavailable'}</h2>
             <p className="text-xs text-gray-500 mb-4">
               Every rupee counts. Max donation is ₹500.
             </p>
@@ -246,6 +251,10 @@ export default function CampaignDetail() {
                   Make another donation
                 </button>
               </div>
+            ) : !canDonate ? (
+              <p role="status" className="rounded-lg bg-gray-50 border border-gray-200 p-4 text-sm text-gray-600">
+                This campaign is no longer accepting donations.
+              </p>
             ) : (
               <form onSubmit={handleDonate}>
                 {error && (

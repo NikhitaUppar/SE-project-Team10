@@ -15,6 +15,10 @@
 For local development with real Gmail SMTP delivery, follow
 [Local development](micro-donation-platform/LOCAL_DEVELOPMENT.md).
 
+Daily campaign expiry (issue #13), donation restrictions, timezone/deployment
+configuration, and test results are documented in
+[the auto-close guide](micro-donation-platform/backend/ISSUE_13_AUTO_CLOSE.md).
+
 ### Prerequisites
 - Node.js 20+
 - A free [Supabase](https://supabase.com) account

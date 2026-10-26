@@ -1,4 +1,5 @@
 const supabase = require('../config/supabase');
+const { CAMPAIGN_STATUS, presentCampaign, closeExpiredCampaigns } = require('../services/campaignLifecycle');
 
 // FR-16, FR-17: Get all active campaigns (public)
 const getCampaigns = async (req, res) => {
@@ -7,16 +8,17 @@ const getCampaigns = async (req, res) => {
     const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 9));
     const offset = (page - 1) * limit;
     const { category, search, status } = req.query;
+    const now = new Date();
 
     // Build Supabase query - default to 'active' campaigns for public browse
     let query = supabase
       .from('campaigns')
       .select('*, campaign_files(file_url, file_type)', { count: 'exact' });
 
-    if (status) {
-      query = query.eq('status', status);
-    } else {
-      query = query.eq('status', 'active');
+    const requestedStatus = status || CAMPAIGN_STATUS.ACTIVE;
+    query = query.eq('status', requestedStatus);
+    if (requestedStatus === CAMPAIGN_STATUS.ACTIVE) {
+      query = query.gte('deadline', now.toISOString());
     }
 
     // Filter by category query param if specified (FR-17)
@@ -53,7 +55,7 @@ const getCampaigns = async (req, res) => {
       const image_url = imageFile ? imageFile.file_url : null;
 
       return {
-        ...campaign,
+        ...presentCampaign(campaign, now),
         progress_percentage,
         image_url,
       };
@@ -101,7 +103,7 @@ const getCampaignById = async (req, res) => {
     const image_url = imageFile ? imageFile.file_url : null;
 
     return res.status(200).json({
-      ...campaign,
+      ...presentCampaign(campaign),
       progress_percentage,
       image_url,
     });
@@ -167,7 +169,7 @@ const createCampaign = async (req, res) => {
         goal_amount: goal,
         category: category.trim(),
         deadline: deadlineDate.toISOString(),
-        status: 'pending_review',
+        status: CAMPAIGN_STATUS.PENDING_REVIEW,
       })
       .select()
       .single();
@@ -350,10 +352,7 @@ const getCampaignStats = async (req, res) => {
 
 // FR-10: Auto-close expired campaigns (called by cron)
 const closePastDeadlineCampaigns = async () => {
-  // TODO (harishreddy2005): Implement
-  // 1. Query campaigns where deadline < now() AND status='active'
-  // 2. Update status to 'closed'
-  console.log('[CRON] closePastDeadlineCampaigns — not implemented yet');
+  return closeExpiredCampaigns();
 };
 
 module.exports = {
