@@ -1,7 +1,9 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
+import ShareButton from '../components/campaign/ShareButton';
+import { getRemainingDaysText } from '../utils/dateUtils';
 
 export default function CampaignDetail() {
   const { id } = useParams();
@@ -9,6 +11,9 @@ export default function CampaignDetail() {
 
   const [campaign, setCampaign] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [donations, setDonations] = useState([]);
+  const [donationsLoading, setDonationsLoading] = useState(true);
+  const [donationsError, setDonationsError] = useState('');
   const [amount, setAmount] = useState(100);
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,6 +44,38 @@ export default function CampaignDetail() {
     };
 
     fetchCampaign();
+  }, [id]);
+
+  // Fetch completed donations for this campaign
+  useEffect(() => {
+    let active = true;
+
+    const fetchDonations = async () => {
+      try {
+        const response = await api.get(`/campaigns/${id}/donations`);
+
+        if (active) {
+          setDonations(response.data.donations || []);
+          setDonationsError('');
+        }
+      } catch (err) {
+        if (active) {
+          setDonationsError(
+            err.response?.data?.error || 'Could not load recent donations.'
+          );
+        }
+      } finally {
+        if (active) {
+          setDonationsLoading(false);
+        }
+      }
+    };
+
+    fetchDonations();
+
+    return () => {
+      active = false;
+    };
   }, [id]);
 
   const handleDonate = async (e) => {
@@ -102,6 +139,17 @@ export default function CampaignDetail() {
             ...prev,
             raised_amount: (Number(prev?.raised_amount) || 0) + numericAmount,
           }));
+          setDonations((prev) => [
+            {
+              id: paymentId,
+              amount: numericAmount,
+              is_anonymous: Boolean(isAnonymous),
+              status: 'completed',
+              created_at: new Date().toISOString(),
+              donor_name: isAnonymous ? 'Anonymous' : (user?.display_name || 'Donor'),
+            },
+            ...prev,
+          ]);
           setIsSubmitting(false);
         },
         prefill: {
@@ -153,6 +201,8 @@ export default function CampaignDetail() {
     Math.round(((campaign?.raised_amount || 0) / (campaign?.goal_amount || 1)) * 100)
   );
 
+  const daysLeftText = getRemainingDaysText(campaign);
+
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
       <Link to="/" className="text-indigo-600 hover:underline mb-6 inline-block font-medium">
@@ -162,19 +212,24 @@ export default function CampaignDetail() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Campaign Info */}
         <div className="md:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full uppercase tracking-wider">
-              {campaign?.category || 'General'}
-            </span>
-            <span
-              className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                campaign?.status === 'active'
-                  ? 'bg-emerald-50 text-emerald-700'
-                  : 'bg-gray-100 text-gray-600'
-              }`}
-            >
-              {campaign?.status === 'active' ? 'Active' : 'Closed'}
-            </span>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full uppercase tracking-wider">
+                {campaign?.category || 'General'}
+              </span>
+              <span
+                className={`px-3 py-1 text-xs font-semibold rounded-full ${
+                  campaign?.status === 'active'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                {campaign?.status === 'active' ? 'Active' : 'Closed'}
+              </span>
+            </div>
+
+            {/* Feature A: Share Campaign Button */}
+            <ShareButton campaign={campaign} variant="button" />
           </div>
 
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
@@ -203,12 +258,85 @@ export default function CampaignDetail() {
               ></div>
             </div>
 
+            {/* Feature B: Days Left Countdown */}
             <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
               <span>{progressPercent}% funded</span>
-              <span>
-                Deadline: {campaign?.deadline ? new Date(campaign.deadline).toLocaleDateString() : 'Ongoing'}
+              <span
+                className="flex items-center gap-1 font-medium"
+                id={`countdown-detail-${campaign?.id}`}
+              >
+                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span
+                  className={
+                    daysLeftText === 'Ends today'
+                      ? 'text-amber-600 font-semibold'
+                      : daysLeftText === 'Campaign ended'
+                      ? 'text-gray-400 font-normal'
+                      : 'text-gray-700'
+                  }
+                >
+                  {daysLeftText}
+                </span>
+                {campaign?.deadline && !isNaN(new Date(campaign.deadline).getTime()) && (
+                  <span className="text-gray-400 font-normal ml-1">
+                    ({new Date(campaign.deadline).toLocaleDateString()})
+                  </span>
+                )}
               </span>
             </div>
+          </div>
+
+          {/* Recent Donations */}
+          <div className="bg-white rounded-xl border border-gray-100 p-5 mt-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">
+              Recent Donations
+            </h2>
+
+            {donationsLoading && (
+              <p className="text-gray-500 text-sm">Loading donations...</p>
+            )}
+
+            {!donationsLoading && donationsError && (
+              <p className="text-red-600 text-sm">{donationsError}</p>
+            )}
+
+            {!donationsLoading &&
+              !donationsError &&
+              donations.length === 0 && (
+                <p className="text-gray-500 text-sm">
+                  No completed donations yet. Be the first to support this campaign!
+                </p>
+              )}
+
+            {!donationsLoading && !donationsError && donations.length > 0 && (
+              <div className="divide-y divide-gray-100">
+                {donations.map((donation) => (
+                  <div
+                    key={donation.id}
+                    className="flex items-center justify-between gap-4 py-3"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-800">
+                        {donation.is_anonymous
+                          ? 'Anonymous'
+                          : donation.donor_name || 'Donor'}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {donation.created_at
+                          ? new Date(donation.created_at).toLocaleDateString('en-IN')
+                          : ''}
+                      </p>
+                    </div>
+
+                    <span className="font-semibold text-indigo-600 whitespace-nowrap">
+                      ₹{Number(donation.amount || 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -235,7 +363,7 @@ export default function CampaignDetail() {
                   <div className="text-gray-600 flex justify-between">
                     <span>Receipt:</span>
                     <span className="text-emerald-700 font-semibold">
-                      ✉ Emailed to registered address
+                      ✓ Emailed to registered address
                     </span>
                   </div>
                 </div>

@@ -1,5 +1,8 @@
+
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 const money = (amount) =>
   new Intl.NumberFormat('en-IN', {
@@ -18,6 +21,8 @@ const date = (value) =>
     : '—';
 
 export default function Dashboard() {
+  const { user, loading: authLoading } = useAuth();
+
   const [stats, setStats] = useState({
     totalDonated: 0,
     campaignsSupported: 0,
@@ -32,10 +37,12 @@ export default function Dashboard() {
 
     try {
       const response = await api.get('/users/me/donations');
-      setStats(response.data.stats || {
-        totalDonated: 0,
-        campaignsSupported: 0,
-      });
+      setStats(
+        response.data.stats || {
+          totalDonated: 0,
+          campaignsSupported: 0,
+        }
+      );
       setDonations(response.data.donations || []);
     } catch (err) {
       setError(
@@ -48,8 +55,76 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    loadDonations();
-  }, []);
+    if (authLoading) return;
+
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    let active = true;
+
+    const fetchDonations = async () => {
+      setLoading(true);
+      setError('');
+
+      try {
+        const response = await api.get('/users/me/donations');
+
+        if (active) {
+          setStats(
+            response.data.stats || {
+              totalDonated: 0,
+              campaignsSupported: 0,
+            }
+          );
+          setDonations(response.data.donations || []);
+        }
+      } catch (err) {
+        if (active) {
+          setError(
+            err.response?.data?.error ||
+              'Could not load donation history. Please try again.'
+          );
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    fetchDonations();
+
+    return () => {
+      active = false;
+    };
+  }, [user, authLoading]);
+
+  if (authLoading || loading) {
+    return (
+      <div className="py-20 text-center text-gray-600">
+        Loading your donations...
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="mx-auto max-w-xl py-20 text-center">
+        <h2 className="text-2xl font-bold text-gray-800">
+          Your Donations
+        </h2>
+        <p className="mt-3 text-gray-600">
+          Please log in to view your donation history.
+        </p>
+        <Link
+          to="/login"
+          className="mt-5 inline-block rounded-lg bg-indigo-600 px-5 py-2 text-white"
+        >
+          Log In
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10">
@@ -66,7 +141,10 @@ export default function Dashboard() {
       </div>
 
       {error && (
-        <div role="alert" className="mb-6 rounded-lg bg-red-50 p-4 text-red-700">
+        <div
+          role="alert"
+          className="mb-6 rounded-lg bg-red-50 p-4 text-red-700"
+        >
           {error}
           <button onClick={loadDonations} className="ml-3 underline">
             Try again
@@ -78,7 +156,7 @@ export default function Dashboard() {
         <section className="rounded-2xl border bg-white p-6 shadow-sm">
           <p className="text-sm text-gray-500">Total donated</p>
           <p className="mt-3 text-3xl font-bold text-indigo-700">
-            {loading ? 'Loading...' : money(stats.totalDonated)}
+            {money(stats.totalDonated)}
           </p>
           <p className="mt-2 text-sm text-gray-500">
             Completed donations
@@ -88,7 +166,7 @@ export default function Dashboard() {
         <section className="rounded-2xl border bg-white p-6 shadow-sm">
           <p className="text-sm text-gray-500">Campaigns supported</p>
           <p className="mt-3 text-3xl font-bold text-indigo-700">
-            {loading ? 'Loading...' : stats.campaignsSupported}
+            {stats.campaignsSupported}
           </p>
           <p className="mt-2 text-sm text-gray-500">
             Campaigns with completed donations
@@ -106,22 +184,24 @@ export default function Dashboard() {
           </p>
         </div>
 
-        {loading ? (
+        {error && donations.length === 0 ? (
           <p className="p-8 text-center text-gray-500">
-            Loading your donations...
+            Unable to display your donation history.
           </p>
         ) : donations.length === 0 ? (
           <div className="p-10 text-center">
-            <h3 className="font-semibold text-gray-800">No donations yet</h3>
+            <h3 className="font-semibold text-gray-800">
+              No donations yet
+            </h3>
             <p className="mt-2 text-sm text-gray-500">
               Your donations will appear here after you make them.
             </p>
-            <a
-              href="/campaigns"
+            <Link
+              to="/campaigns"
               className="mt-5 inline-block rounded-lg bg-indigo-600 px-5 py-2.5 font-semibold text-white"
             >
               Explore campaigns
-            </a>
+            </Link>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -131,6 +211,7 @@ export default function Dashboard() {
                   <th className="px-6 py-4">Campaign</th>
                   <th className="px-6 py-4">Amount</th>
                   <th className="px-6 py-4">Date</th>
+                  <th className="px-6 py-4">Privacy</th>
                   <th className="px-6 py-4">Status</th>
                 </tr>
               </thead>
@@ -138,18 +219,18 @@ export default function Dashboard() {
                 {donations.map((donation) => (
                   <tr key={donation.id}>
                     <td className="px-6 py-4 font-medium text-gray-900">
-                      {donation.campaign_name || 'Campaign'}
-                      {donation.is_anonymous && (
-                        <span className="ml-2 text-xs text-gray-500">
-                          Anonymous
-                        </span>
-                      )}
+                      {donation.campaign_name ||
+                        donation.campaigns?.title ||
+                        'Campaign'}
                     </td>
                     <td className="px-6 py-4 font-semibold">
                       {money(donation.amount)}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {date(donation.created_at)}
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      {donation.is_anonymous ? 'Anonymous' : 'Public'}
                     </td>
                     <td className="px-6 py-4">
                       <span className="rounded-full bg-gray-100 px-3 py-1 text-xs capitalize text-gray-700">

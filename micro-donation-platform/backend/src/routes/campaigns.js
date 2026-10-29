@@ -7,6 +7,7 @@ const { authenticate } = require('../middleware/auth');
 const {
   getCampaigns,
   getCampaignById,
+  getCampaignDonations,
   createCampaign,
   uploadCampaignFile,
   postUpdate,
@@ -57,6 +58,7 @@ const handleCampaignUpload = (req, res, next) => {
 
 router.get('/', getCampaigns);
 router.get('/:id', getCampaignById);
+router.get('/:id/donations', getCampaignDonations);
 router.get('/:id/stats', authenticate, getCampaignStats);
 router.post('/', authenticate, createCampaign);
 router.post(

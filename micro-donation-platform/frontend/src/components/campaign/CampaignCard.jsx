@@ -1,5 +1,7 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import ShareButton from './ShareButton';
+import { getRemainingDaysText } from '../../utils/dateUtils';
 
 export default function CampaignCard({ campaign }) {
   const [imgError, setImgError] = useState(false);
@@ -15,17 +17,7 @@ export default function CampaignCard({ campaign }) {
       : 0
   );
 
-  // Calculate days left until deadline
-  const getDeadlineText = () => {
-    if (!campaign?.deadline) return 'Ongoing';
-    const deadlineDate = new Date(campaign.deadline);
-    if (isNaN(deadlineDate.getTime())) return 'Ongoing';
-
-    const diffDays = Math.ceil((deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-    if (diffDays <= 0) return 'Ended';
-    if (diffDays === 1) return '1 day left';
-    return `${diffDays} days left`;
-  };
+  const daysLeftText = getRemainingDaysText(campaign);
 
   // Get image URL or fallback placeholder
   const imageUrl = !imgError && (campaign?.image_url || campaign?.campaign_files?.[0]?.file_url);
@@ -69,7 +61,13 @@ export default function CampaignCard({ campaign }) {
         </span>
 
         {/* Status Pill Badge */}
-        <span className="absolute top-3 right-3 bg-emerald-500/90 text-white text-xs font-medium px-2.5 py-1 rounded-full shadow-sm capitalize">
+        <span
+          className={`absolute top-3 right-3 text-xs font-medium px-2.5 py-1 rounded-full shadow-sm capitalize ${
+            campaign?.status === 'active'
+              ? 'bg-emerald-500/90 text-white'
+              : 'bg-gray-600/90 text-white'
+          }`}
+        >
           {campaign?.status || 'Active'}
         </span>
       </div>
@@ -95,14 +93,14 @@ export default function CampaignCard({ campaign }) {
           <div className="flex justify-between items-baseline mb-2 text-sm">
             <div>
               <span className="font-bold text-gray-900 text-base">
-                ?{raised.toLocaleString('en-IN')}
+                ₹{raised.toLocaleString('en-IN')}
               </span>
               <span className="text-xs text-gray-500 ml-1">raised</span>
             </div>
             <div className="text-right">
               <span className="text-xs text-gray-500">Goal: </span>
               <span className="font-semibold text-gray-700">
-                ?{goal.toLocaleString('en-IN')}
+                ₹{goal.toLocaleString('en-IN')}
               </span>
             </div>
           </div>
@@ -119,26 +117,41 @@ export default function CampaignCard({ campaign }) {
             ></div>
           </div>
 
-          {/* Progress % and Deadline */}
+          {/* Progress % and Days Left Countdown */}
           <div className="flex justify-between items-center text-xs text-gray-500 mt-2 font-medium">
             <span className="text-indigo-600 font-semibold">{progress}% funded</span>
-            <span className="flex items-center gap-1">
+            <span
+              className="flex items-center gap-1"
+              id={`countdown-${campaign?.id}`}
+              title={campaign?.deadline ? `Deadline: ${new Date(campaign.deadline).toLocaleDateString()}` : 'Ongoing'}
+            >
               <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              {getDeadlineText()}
+              <span
+                className={
+                  daysLeftText === 'Ends today'
+                    ? 'text-amber-600 font-semibold'
+                    : daysLeftText === 'Campaign ended'
+                    ? 'text-gray-400 font-normal'
+                    : 'text-gray-600'
+                }
+              >
+                {daysLeftText}
+              </span>
             </span>
           </div>
 
-          {/* Action Button */}
-          <div className="mt-4">
+          {/* Action Buttons */}
+          <div className="mt-4 flex items-center gap-2">
             <Link
               to={`/campaigns/${campaign?.id}`}
-              className="w-full block text-center bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white font-medium py-2.5 px-4 rounded-lg transition-colors duration-200 text-sm shadow-sm"
+              className="flex-1 block text-center bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white font-medium py-2.5 px-4 rounded-lg transition-colors duration-200 text-sm shadow-sm"
               id={`donate-btn-${campaign?.id}`}
             >
               Donate Now
             </Link>
+            <ShareButton campaign={campaign} variant="icon" />
           </div>
         </div>
       </div>
