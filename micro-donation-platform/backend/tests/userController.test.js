@@ -1,3 +1,4 @@
+
 jest.mock('../src/config/supabase', () => ({
   from: jest.fn(),
 }));
@@ -81,10 +82,26 @@ describe('User Controller - getMyDonations (FR-19)', () => {
       'id, campaign_id, amount, is_anonymous, status, created_at, campaigns(title)'
     );
     expect(chain.eq).toHaveBeenCalledWith('donor_id', 'donor-123');
-    expect(chain.order).toHaveBeenCalledWith('created_at', { ascending: false });
+    expect(chain.order).toHaveBeenCalledWith('created_at', {
+      ascending: false,
+    });
     expect(res.status).toHaveBeenCalledWith(200);
+
     expect(res.json).toHaveBeenCalledWith({
-      donations: mockDonations,
+      stats: {
+        totalDonated: 600,
+        campaignsSupported: 2,
+      },
+      donations: [
+        {
+          ...mockDonations[0],
+          campaign_name: 'Emergency Flood Relief',
+        },
+        {
+          ...mockDonations[1],
+          campaign_name: 'School Supplies Drive',
+        },
+      ],
     });
   });
 
