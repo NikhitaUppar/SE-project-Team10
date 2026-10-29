@@ -6,7 +6,9 @@ const getMyDonations = async (req, res) => {
     const donorId = req.user?.id;
 
     if (!donorId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return res.status(401).json({
+        error: 'Authentication required',
+      });
     }
 
     const { data, error } = await supabase
@@ -25,6 +27,7 @@ const getMyDonations = async (req, res) => {
     }
 
     const donations = data || [];
+
     const completed = donations.filter(
       (donation) => donation.status === 'completed'
     );
@@ -35,7 +38,9 @@ const getMyDonations = async (req, res) => {
     );
 
     const campaignsSupported = new Set(
-      completed.map((donation) => donation.campaign_id).filter(Boolean)
+      completed
+        .map((donation) => donation.campaign_id)
+        .filter(Boolean)
     ).size;
 
     const donationHistory = donations.map((donation) => ({
@@ -54,7 +59,9 @@ const getMyDonations = async (req, res) => {
     });
   } catch (err) {
     console.error('Unexpected donation-history error:', err.message);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({
+      error: 'Internal server error',
+    });
   }
 };
 

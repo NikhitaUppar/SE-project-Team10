@@ -7,6 +7,7 @@ const {
   createCampaign,
   getCampaigns,
   getCampaignById,
+  getCampaignDonations,
 } = require('../src/controllers/campaignController');
 
 describe('Campaign Creation API', () => {
@@ -349,6 +350,175 @@ describe('Get Campaign by ID API (getCampaignById)', () => {
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({
       error: 'Failed to fetch campaign',
+    });
+  });
+});
+
+describe('Get Campaign Donations API (FR-14)', () => {
+  let req;
+  let res;
+  let chain;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    req = {
+      params: { id: 'camp-123' },
+      query: {},
+    };
+
+    res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    };
+
+    chain = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      limit: jest.fn(),
+    };
+
+    supabase.from.mockReturnValue(chain);
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('returns completed donations with donor name for public donations', async () => {
+    const mockData = [
+      {
+        id: 'don-1',
+        amount: 250,
+        is_anonymous: false,
+        status: 'completed',
+        created_at: '2026-10-26T10:00:00.000Z',
+        users: { display_name: 'Alice Johnson' },
+      },
+    ];
+
+    chain.limit.mockResolvedValue({
+      data: mockData,
+      error: null,
+    });
+
+    await getCampaignDonations(req, res);
+
+    expect(supabase.from).toHaveBeenCalledWith('donations');
+    expect(chain.eq).toHaveBeenCalledWith('campaign_id', 'camp-123');
+    expect(chain.eq).toHaveBeenCalledWith('status', 'completed');
+    expect(chain.order).toHaveBeenCalledWith('created_at', { ascending: false });
+    expect(chain.limit).toHaveBeenCalledWith(20);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      donations: [
+        {
+          id: 'don-1',
+          amount: 250,
+          is_anonymous: false,
+          status: 'completed',
+          created_at: '2026-10-26T10:00:00.000Z',
+          donor_name: 'Alice Johnson',
+        },
+      ],
+    });
+  });
+
+  test('masks donor name as Anonymous when is_anonymous is true', async () => {
+    const mockData = [
+      {
+        id: 'don-2',
+        amount: 100,
+        is_anonymous: true,
+        status: 'completed',
+        created_at: '2026-10-26T11:00:00.000Z',
+        users: { display_name: 'Secret Person' },
+      },
+    ];
+
+    chain.limit.mockResolvedValue({
+      data: mockData,
+      error: null,
+    });
+
+    await getCampaignDonations(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      donations: [
+        {
+          id: 'don-2',
+          amount: 100,
+          is_anonymous: true,
+          status: 'completed',
+          created_at: '2026-10-26T11:00:00.000Z',
+          donor_name: 'Anonymous',
+        },
+      ],
+    });
+  });
+
+  test('falls back to Donor when public donor has no display_name', async () => {
+    const mockData = [
+      {
+        id: 'don-3',
+        amount: 50,
+        is_anonymous: false,
+        status: 'completed',
+        created_at: '2026-10-26T12:00:00.000Z',
+        users: null,
+      },
+    ];
+
+    chain.limit.mockResolvedValue({
+      data: mockData,
+      error: null,
+    });
+
+    await getCampaignDonations(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      donations: [
+        {
+          id: 'don-3',
+          amount: 50,
+          is_anonymous: false,
+          status: 'completed',
+          created_at: '2026-10-26T12:00:00.000Z',
+          donor_name: 'Donor',
+        },
+      ],
+    });
+  });
+
+  test('applies custom limit query parameter correctly', async () => {
+    req.query.limit = '5';
+    chain.limit.mockResolvedValue({
+      data: [],
+      error: null,
+    });
+
+    await getCampaignDonations(req, res);
+
+    expect(chain.limit).toHaveBeenCalledWith(5);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ donations: [] });
+  });
+
+  test('returns 500 when database error occurs', async () => {
+    chain.limit.mockResolvedValue({
+      data: null,
+      error: { message: 'Failed to query database' },
+    });
+
+    await getCampaignDonations(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Failed to fetch campaign donations',
     });
   });
 });
