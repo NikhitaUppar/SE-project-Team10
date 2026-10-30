@@ -12,6 +12,7 @@ const {
   uploadCampaignFile,
   postUpdate,
   getCampaignStats,
+  getPublicStats,
 } = require('../controllers/campaignController');
 
 const upload = multer({
@@ -57,6 +58,7 @@ const handleCampaignUpload = (req, res, next) => {
 };
 
 router.get('/', getCampaigns);
+router.get('/public-stats', getPublicStats); // must be before /:id
 router.get('/:id', getCampaignById);
 router.get('/:id/donations', getCampaignDonations);
 router.get('/:id/stats', authenticate, getCampaignStats);
