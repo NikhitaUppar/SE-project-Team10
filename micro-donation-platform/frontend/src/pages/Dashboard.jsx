@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../utils/api';
@@ -27,6 +26,7 @@ export default function Dashboard() {
     totalDonated: 0,
     campaignsSupported: 0,
   });
+
   const [donations, setDonations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -37,12 +37,14 @@ export default function Dashboard() {
 
     try {
       const response = await api.get('/users/me/donations');
+
       setStats(
         response.data.stats || {
           totalDonated: 0,
           campaignsSupported: 0,
         }
       );
+
       setDonations(response.data.donations || []);
     } catch (err) {
       setError(
@@ -62,188 +64,278 @@ export default function Dashboard() {
       return;
     }
 
-    let active = true;
-
-    const fetchDonations = async () => {
-      setLoading(true);
-      setError('');
-
-      try {
-        const response = await api.get('/users/me/donations');
-
-        if (active) {
-          setStats(
-            response.data.stats || {
-              totalDonated: 0,
-              campaignsSupported: 0,
-            }
-          );
-          setDonations(response.data.donations || []);
-        }
-      } catch (err) {
-        if (active) {
-          setError(
-            err.response?.data?.error ||
-              'Could not load donation history. Please try again.'
-          );
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
-    fetchDonations();
-
-    return () => {
-      active = false;
-    };
+    loadDonations();
   }, [user, authLoading]);
 
   if (authLoading || loading) {
     return (
-      <div className="py-20 text-center text-gray-600">
-        Loading your donations...
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '60vh',
+          flexDirection: 'column',
+          gap: 12,
+        }}
+      >
+        <p style={{ color: '#A16207', fontSize: '0.9rem' }}>
+          Loading your donations...
+        </p>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="mx-auto max-w-xl py-20 text-center">
-        <h2 className="text-2xl font-bold text-gray-800">
-          Your Donations
-        </h2>
-        <p className="mt-3 text-gray-600">
-          Please log in to view your donation history.
-        </p>
-        <Link
-          to="/login"
-          className="mt-5 inline-block rounded-lg bg-indigo-600 px-5 py-2 text-white"
-        >
-          Log In
-        </Link>
+      <div
+        style={{
+          minHeight: '60vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 16,
+          padding: '32px 16px',
+        }}
+      >
+        <h2>Your Donations</h2>
+        <p>Please log in to view your donation history.</p>
+        <Link to="/login">Log In</Link>
       </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10">
-      <div className="mb-8">
-        <p className="text-sm font-bold uppercase tracking-widest text-indigo-600">
-          Your giving journey
+    <div
+      style={{
+        maxWidth: 900,
+        margin: '0 auto',
+        padding: '32px 16px 64px',
+      }}
+    >
+      <div style={{ marginBottom: 32 }}>
+        <p
+          style={{
+            fontSize: '0.75rem',
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: '#EA580C',
+            marginBottom: 8,
+          }}
+        >
+          Welcome back
         </p>
-        <h1 className="mt-2 text-3xl font-extrabold text-gray-900">
-          Donor Impact Dashboard
+
+        <h1
+          style={{
+            fontSize: '2rem',
+            fontWeight: 900,
+            color: '#7C2D12',
+            margin: '0 0 8px',
+          }}
+        >
+          {user.display_name || 'Your'}'s Impact
         </h1>
-        <p className="mt-2 text-gray-500">
-          See your contributions and the campaigns you support.
+
+        <p style={{ color: '#92400E', fontSize: '0.95rem' }}>
+          Every donation you've made has helped change someone's life.
         </p>
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))',
+          gap: 16,
+          marginBottom: 36,
+        }}
+      >
+        {[
+          {
+            label: 'Total Donated',
+            value: money(stats.totalDonated),
+          },
+          {
+            label: 'Campaigns Supported',
+            value: stats.campaignsSupported,
+          },
+          {
+            label: 'Donations Made',
+            value: donations.length,
+          },
+        ].map(({ label, value }) => (
+          <div
+            key={label}
+            style={{
+              background: '#fff',
+              border: '1.5px solid #FED7AA',
+              borderRadius: 14,
+              padding: '20px 18px',
+            }}
+          >
+            <div
+              style={{
+                fontSize: '1.5rem',
+                fontWeight: 900,
+                color: '#C2410C',
+              }}
+            >
+              {value}
+            </div>
+
+            <div
+              style={{
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                color: '#78350F',
+                marginTop: 8,
+              }}
+            >
+              {label}
+            </div>
+          </div>
+        ))}
       </div>
 
       {error && (
         <div
           role="alert"
-          className="mb-6 rounded-lg bg-red-50 p-4 text-red-700"
+          style={{
+            background: '#FEF2F2',
+            border: '1px solid #FECACA',
+            color: '#991B1B',
+            borderRadius: 12,
+            padding: 16,
+            marginBottom: 24,
+          }}
         >
           {error}
-          <button onClick={loadDonations} className="ml-3 underline">
+
+          <button
+            onClick={loadDonations}
+            style={{
+              marginLeft: 12,
+              textDecoration: 'underline',
+            }}
+          >
             Try again
           </button>
         </div>
       )}
 
-      <div className="mb-8 grid gap-5 sm:grid-cols-2">
-        <section className="rounded-2xl border bg-white p-6 shadow-sm">
-          <p className="text-sm text-gray-500">Total donated</p>
-          <p className="mt-3 text-3xl font-bold text-indigo-700">
-            {money(stats.totalDonated)}
-          </p>
-          <p className="mt-2 text-sm text-gray-500">
-            Completed donations
-          </p>
-        </section>
+      {!error && donations.length === 0 && (
+        <div
+          style={{
+            background: '#fff',
+            border: '2px dashed #FED7AA',
+            borderRadius: 20,
+            padding: 40,
+            textAlign: 'center',
+          }}
+        >
+          <h3 style={{ color: '#7C2D12' }}>No donations yet</h3>
 
-        <section className="rounded-2xl border bg-white p-6 shadow-sm">
-          <p className="text-sm text-gray-500">Campaigns supported</p>
-          <p className="mt-3 text-3xl font-bold text-indigo-700">
-            {stats.campaignsSupported}
+          <p style={{ color: '#92400E', marginBottom: 20 }}>
+            Your donations will appear here after you make them.
           </p>
-          <p className="mt-2 text-sm text-gray-500">
-            Campaigns with completed donations
-          </p>
-        </section>
-      </div>
 
-      <section className="overflow-hidden rounded-2xl border bg-white shadow-sm">
-        <div className="border-b px-6 py-5">
-          <h2 className="text-xl font-bold text-gray-900">
-            Donation history
-          </h2>
-          <p className="mt-1 text-sm text-gray-500">
-            Your newest transactions appear first.
-          </p>
+          <Link to="/campaigns">Browse Campaigns</Link>
         </div>
+      )}
 
-        {error && donations.length === 0 ? (
-          <p className="p-8 text-center text-gray-500">
-            Unable to display your donation history.
-          </p>
-        ) : donations.length === 0 ? (
-          <div className="p-10 text-center">
-            <h3 className="font-semibold text-gray-800">
-              No donations yet
-            </h3>
-            <p className="mt-2 text-sm text-gray-500">
-              Your donations will appear here after you make them.
+      {donations.length > 0 && (
+        <div
+          style={{
+            background: '#fff',
+            border: '1.5px solid #FED7AA',
+            borderRadius: 16,
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid #FED7AA',
+            }}
+          >
+            <h2 style={{ color: '#7C2D12', fontSize: '1rem' }}>
+              Donation History
+            </h2>
+
+            <p style={{ color: '#92400E', fontSize: '0.85rem' }}>
+              Your newest transactions appear first.
             </p>
-            <Link
-              to="/campaigns"
-              className="mt-5 inline-block rounded-lg bg-indigo-600 px-5 py-2.5 font-semibold text-white"
-            >
-              Explore campaigns
-            </Link>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                <tr>
-                  <th className="px-6 py-4">Campaign</th>
-                  <th className="px-6 py-4">Amount</th>
-                  <th className="px-6 py-4">Date</th>
-                  <th className="px-6 py-4">Privacy</th>
-                  <th className="px-6 py-4">Status</th>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: '0.875rem',
+              }}
+            >
+              <thead>
+                <tr style={{ background: '#FFF7ED' }}>
+                  {['Campaign', 'Amount', 'Date', 'Privacy', 'Status'].map(
+                    (heading) => (
+                      <th
+                        key={heading}
+                        style={{
+                          padding: 14,
+                          textAlign: 'left',
+                          color: '#78350F',
+                        }}
+                      >
+                        {heading}
+                      </th>
+                    )
+                  )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+
+              <tbody>
                 {donations.map((donation) => (
-                  <tr key={donation.id}>
-                    <td className="px-6 py-4 font-medium text-gray-900">
+                  <tr
+                    key={donation.id}
+                    style={{ borderTop: '1px solid #FEF3C7' }}
+                  >
+                    <td style={{ padding: 14 }}>
                       {donation.campaign_name ||
                         donation.campaigns?.title ||
                         'Campaign'}
                     </td>
-                    <td className="px-6 py-4 font-semibold">
+
+                    <td style={{ padding: 14 }}>
                       {money(donation.amount)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
+
+                    <td style={{ padding: 14 }}>
                       {date(donation.created_at)}
                     </td>
-                    <td className="px-6 py-4 text-sm">
+
+                    <td style={{ padding: 14 }}>
                       {donation.is_anonymous ? 'Anonymous' : 'Public'}
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="rounded-full bg-gray-100 px-3 py-1 text-xs capitalize text-gray-700">
-                        {donation.status}
-                      </span>
+
+                    <td
+                      style={{
+                        padding: 14,
+                        textTransform: 'capitalize',
+                      }}
+                    >
+                      {donation.status}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        )}
-      </section>
-    </main>
+        </div>
+      )}
+    </div>
   );
 }
