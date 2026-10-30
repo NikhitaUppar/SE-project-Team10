@@ -29,10 +29,14 @@ const getCampaigns = async (req, res) => {
       query = query.ilike('title', `%${search.trim()}%`);
     }
 
-    // Order by newest first and paginate
-    query = query
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+    // Order: deadline ascending (urgent first) when requested, otherwise newest first
+    const sortBy = req.query.sort;
+    if (sortBy === 'deadline') {
+      query = query.order('deadline', { ascending: true });
+    } else {
+      query = query.order('created_at', { ascending: false });
+    }
+    query = query.range(offset, offset + limit - 1);
 
     const { data, count, error } = await query;
 
@@ -392,6 +396,43 @@ const getCampaignDonations = async (req, res) => {
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
+// Public homepage stats: total campaigns, total completed donations, total unique donors
+const getPublicStats = async (req, res) => {
+  try {
+    const [campaignsRes, donationsRes, donorsRes] = await Promise.all([
+      supabase
+        .from('campaigns')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active'),
+      supabase
+        .from('donations')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'completed'),
+      supabase
+        .from('donations')
+        .select('user_id', { count: 'exact' })
+        .eq('status', 'completed')
+        .not('user_id', 'is', null),
+    ]);
+
+    if (campaignsRes.error) throw campaignsRes.error;
+    if (donationsRes.error) throw donationsRes.error;
+    if (donorsRes.error) throw donorsRes.error;
+
+    // Count unique donor IDs
+    const uniqueDonors = new Set((donorsRes.data || []).map((r) => r.user_id)).size;
+
+    return res.status(200).json({
+      total_campaigns: campaignsRes.count || 0,
+      total_donations: donationsRes.count || 0,
+      total_donors: uniqueDonors,
+    });
+  } catch (err) {
+    console.error('getPublicStats error:', err.message);
+    return res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+};
+
 module.exports = {
   getCampaigns,
   getCampaignById,
@@ -400,5 +441,6 @@ module.exports = {
   uploadCampaignFile,
   postUpdate,
   getCampaignStats,
+  getPublicStats,
   closePastDeadlineCampaigns,
 };
