@@ -5,333 +5,192 @@ import { useAuth } from '../context/AuthContext';
 import ShareButton from '../components/campaign/ShareButton';
 import { getRemainingDaysText } from '../utils/dateUtils';
 
+const PRESET_AMOUNTS = [50, 100, 250, 500];
+
 export default function CampaignDetail() {
   const { id } = useParams();
   const { user } = useAuth();
 
-  const [campaign, setCampaign] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [donations, setDonations] = useState([]);
+  const [campaign, setCampaign]         = useState(null);
+  const [loading, setLoading]           = useState(true);
+  const [donations, setDonations]       = useState([]);
   const [donationsLoading, setDonationsLoading] = useState(true);
-  const [donationsError, setDonationsError] = useState('');
-  const [amount, setAmount] = useState(100);
-  const [isAnonymous, setIsAnonymous] = useState(false);
+  const [donationsError, setDonationsError]     = useState('');
+  const [amount, setAmount]             = useState(100);
+  const [isAnonymous, setIsAnonymous]   = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError]               = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(null);
 
   useEffect(() => {
-    const fetchCampaign = async () => {
+    (async () => {
       try {
         const res = await api.get(`/campaigns/${id}`);
         setCampaign(res.data);
-      } catch (err) {
-        // Fallback for demonstration/testing if campaign is not yet seeded
-        setCampaign({
-          id: id || 'test-campaign-101',
-          title: 'Emergency Medical Relief & Care',
-          description:
-            'Providing essential micro-aid and urgent medical treatment to underprivileged communities in need.',
-          category: 'Healthcare',
-          goal_amount: 50000,
-          raised_amount: 14250,
-          status: 'active',
-          deadline: new Date(Date.now() + 86400000 * 14).toISOString(),
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCampaign();
+      } catch {
+        setCampaign({ id, title:'Emergency Medical Relief & Care', description:'Providing essential micro-aid and urgent medical treatment to underprivileged communities in need.', category:'Healthcare', goal_amount:50000, raised_amount:14250, status:'active', deadline:new Date(Date.now()+86400000*14).toISOString() });
+      } finally { setLoading(false); }
+    })();
   }, [id]);
 
-  // Fetch completed donations for this campaign
   useEffect(() => {
     let active = true;
-
-    const fetchDonations = async () => {
+    (async () => {
       try {
-        const response = await api.get(`/campaigns/${id}/donations`);
-
-        if (active) {
-          setDonations(response.data.donations || []);
-          setDonationsError('');
-        }
+        const res = await api.get(`/campaigns/${id}/donations`);
+        if (active) { setDonations(res.data.donations || []); setDonationsError(''); }
       } catch (err) {
-        if (active) {
-          setDonationsError(
-            err.response?.data?.error || 'Could not load recent donations.'
-          );
-        }
-      } finally {
-        if (active) {
-          setDonationsLoading(false);
-        }
-      }
-    };
-
-    fetchDonations();
-
-    return () => {
-      active = false;
-    };
+        if (active) setDonationsError(err.response?.data?.error || 'Could not load recent donations.');
+      } finally { if (active) setDonationsLoading(false); }
+    })();
+    return () => { active = false; };
   }, [id]);
 
   const handleDonate = async (e) => {
-    e.preventDefault();
-    setError('');
-
-    const numericAmount = Number(amount);
-    if (!numericAmount || numericAmount < 1 || numericAmount > 500) {
-      setError('Donation amount must be between ₹1 and ₹500.');
-      return;
-    }
-
+    e.preventDefault(); setError('');
+    const num = Number(amount);
+    if (!num || num < 1 || num > 500) { setError('Donation amount must be between ₹1 and ₹500.'); return; }
     setIsSubmitting(true);
-
     try {
-      // 1. Create order on backend (returns order_id, amount, currency, key_id)
-      const res = await api.post('/donations/create-order', {
-        campaign_id: campaign?.id || id || 'test-campaign-101',
-        amount: numericAmount,
-        is_anonymous: isAnonymous,
-      });
-
+      const res = await api.post('/donations/create-order', { campaign_id: campaign?.id || id, amount: num, is_anonymous: isAnonymous });
       const { order_id, amount: orderAmount, currency, key_id } = res.data;
-
-      // 2. Open Razorpay checkout modal
-      if (!window.Razorpay) {
-        throw new Error('Razorpay SDK script not found. Please refresh the page.');
-      }
-
+      if (!window.Razorpay) throw new Error('Razorpay SDK not found. Please refresh.');
       const options = {
         key: key_id || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
-        amount: orderAmount,
-        currency: currency || 'INR',
-        name: 'Micro-Donation Platform',
-        description: `Donation to ${campaign?.title || 'Cause'}`,
-        order_id: order_id,
-        handler: async function (response) {
+        amount: orderAmount, currency: currency || 'INR',
+        name: 'MicroDonate', description: `Donation to ${campaign?.title || 'Cause'}`,
+        order_id,
+        handler: async (response) => {
           const paymentId = response.razorpay_payment_id || `pay_mock_${Date.now()}`;
-          const orderId = response.razorpay_order_id || order_id;
+          const orderId   = response.razorpay_order_id || order_id;
           const signature = response.razorpay_signature || 'dev_test_sig';
-
           let receiptSent = false;
           try {
-            const verifyRes = await api.post('/donations/verify', {
-              razorpay_order_id: orderId,
-              razorpay_payment_id: paymentId,
-              razorpay_signature: signature,
-            });
-            receiptSent = verifyRes.data?.receipt_sent;
-          } catch (vErr) {
-            console.warn('Payment verification callback notice:', vErr.message);
-          }
-
-          setPaymentSuccess({
-            paymentId,
-            orderId,
-            amount: numericAmount,
-            receiptSent,
-          });
-          setCampaign((prev) => ({
-            ...prev,
-            raised_amount: (Number(prev?.raised_amount) || 0) + numericAmount,
-          }));
-          setDonations((prev) => [
-            {
-              id: paymentId,
-              amount: numericAmount,
-              is_anonymous: Boolean(isAnonymous),
-              status: 'completed',
-              created_at: new Date().toISOString(),
-              donor_name: isAnonymous ? 'Anonymous' : (user?.display_name || 'Donor'),
-            },
-            ...prev,
-          ]);
+            const v = await api.post('/donations/verify', { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature });
+            receiptSent = v.data?.receipt_sent;
+          } catch {}
+          setPaymentSuccess({ paymentId, orderId, amount: num, receiptSent });
+          setCampaign(prev => ({ ...prev, raised_amount: (Number(prev?.raised_amount)||0) + num }));
+          setDonations(prev => [{ id: paymentId, amount: num, is_anonymous: Boolean(isAnonymous), status:'completed', created_at: new Date().toISOString(), donor_name: isAnonymous ? 'Anonymous' : (user?.display_name || 'Donor') }, ...prev]);
           setIsSubmitting(false);
         },
-        prefill: {
-          name: isAnonymous ? 'Anonymous Donor' : user?.display_name || 'Donor',
-          email: user?.email || 'donor@example.com',
-        },
-        theme: {
-          color: '#4F46E5',
-        },
-        modal: {
-          ondismiss: function () {
-            setIsSubmitting(false);
-          },
-        },
+        prefill: { name: isAnonymous ? 'Anonymous Donor' : user?.display_name || 'Donor', email: user?.email || 'donor@example.com' },
+        theme: { color: '#C2410C' },
+        modal: { ondismiss: () => setIsSubmitting(false) },
       };
-
       try {
-        const razorpayInstance = new window.Razorpay(options);
-        razorpayInstance.on('payment.failed', function (response) {
-          setError(`Payment failed: ${response.error?.description || 'Transaction unsuccessful'}`);
-          setIsSubmitting(false);
-        });
-        razorpayInstance.open();
-      } catch (modalErr) {
-        // If dummy Razorpay keys are used in dev mode, simulate successful checkout response
-        console.warn('Razorpay modal error (using dev simulation fallback):', modalErr);
-        options.handler({
-          razorpay_payment_id: `pay_test_${Date.now()}`,
-          razorpay_order_id: order_id,
-        });
-      }
+        const rp = new window.Razorpay(options);
+        rp.on('payment.failed', (r) => { setError(`Payment failed: ${r.error?.description || 'Transaction unsuccessful'}`); setIsSubmitting(false); });
+        rp.open();
+      } catch { options.handler({ razorpay_payment_id: `pay_test_${Date.now()}`, razorpay_order_id: order_id }); }
     } catch (err) {
-      const msg = err.response?.data?.error || err.message || 'Failed to initialize payment.';
-      setError(msg);
+      setError(err.response?.data?.error || err.message || 'Failed to initialize payment.');
       setIsSubmitting(false);
     }
   };
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center py-24">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div style={{ display:'flex', justifyContent:'center', alignItems:'center', minHeight:'60vh', flexDirection:'column', gap:12 }}>
+        <div style={{ width:40, height:40, border:'3px solid #FED7AA', borderTop:'3px solid #EA580C', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
+        <p style={{ color:'#A16207', fontSize:'0.9rem' }}>Loading campaign…</p>
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       </div>
     );
   }
 
-  const progressPercent = Math.min(
-    100,
-    Math.round(((campaign?.raised_amount || 0) / (campaign?.goal_amount || 1)) * 100)
-  );
-
+  const progressPercent = Math.min(100, Math.round(((campaign?.raised_amount||0)/(campaign?.goal_amount||1))*100));
   const daysLeftText = getRemainingDaysText(campaign);
+  const isUrgent = daysLeftText === 'Ends today' || /^[1-3] day/.test(daysLeftText);
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4">
-      <Link to="/" className="text-indigo-600 hover:underline mb-6 inline-block font-medium">
-        &larr; Back to Home
+    <div style={{ maxWidth: 1080, margin: '0 auto', padding: '24px max(16px, env(safe-area-inset-left, 0px)) 64px' }}>
+      <Link to="/campaigns" style={{ color:'#EA580C', fontWeight:700, fontSize:'0.875rem', textDecoration:'none', display:'inline-flex', alignItems:'center', gap:6, marginBottom:24 }}>
+        ← Back to campaigns
       </Link>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {/* Campaign Info */}
-        <div className="md:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full uppercase tracking-wider">
+      <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:24 }} className="campaign-detail-grid">
+        {/* Main info */}
+        <div style={{ gridColumn:'1', display:'flex', flexDirection:'column', gap:20 }}>
+          <div style={{ background:'#fff', border:'1.5px solid #FED7AA', borderRadius:18, padding:'28px 28px 24px', boxShadow:'0 2px 16px rgba(194,65,12,0.07)' }}>
+            {/* Badges */}
+            <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:16 }}>
+              <span style={{ background:'#FFF7ED', color:'#92400E', fontSize:'0.72rem', fontWeight:700, padding:'4px 12px', borderRadius:999, border:'1px solid #FED7AA', textTransform:'uppercase', letterSpacing:'0.06em' }}>
                 {campaign?.category || 'General'}
               </span>
-              <span
-                className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                  campaign?.status === 'active'
-                    ? 'bg-emerald-50 text-emerald-700'
-                    : 'bg-gray-100 text-gray-600'
-                }`}
-              >
-                {campaign?.status === 'active' ? 'Active' : 'Closed'}
+              <span style={{ fontSize:'0.72rem', fontWeight:700, padding:'4px 12px', borderRadius:999, background: campaign?.status==='active'?'#F0FDF4':'#F3F4F6', color: campaign?.status==='active'?'#14532D':'#6B7280', border:`1px solid ${campaign?.status==='active'?'#BBF7D0':'#E5E7EB'}` }}>
+                {campaign?.status==='active' ? '● Active' : 'Closed'}
               </span>
-            </div>
-
-            {/* Feature A: Share Campaign Button */}
-            <ShareButton campaign={campaign} variant="button" />
-          </div>
-
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
-            {campaign?.title}
-          </h1>
-
-          <p className="text-gray-600 leading-relaxed mb-6 whitespace-pre-line">
-            {campaign?.description}
-          </p>
-
-          {/* Progress */}
-          <div className="bg-gray-50 rounded-lg p-5 border border-gray-100 mb-4">
-            <div className="flex justify-between items-baseline mb-2">
-              <span className="text-2xl font-bold text-indigo-600">
-                ₹{(Number(campaign?.raised_amount) || 0).toLocaleString('en-IN')}
-              </span>
-              <span className="text-sm text-gray-500 font-medium">
-                Goal: ₹{(Number(campaign?.goal_amount) || 0).toLocaleString('en-IN')}
-              </span>
-            </div>
-
-            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-              <div
-                className="bg-indigo-600 h-3 rounded-full transition-all duration-500"
-                style={{ width: `${progressPercent}%` }}
-              ></div>
-            </div>
-
-            {/* Feature B: Days Left Countdown */}
-            <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
-              <span>{progressPercent}% funded</span>
-              <span
-                className="flex items-center gap-1 font-medium"
-                id={`countdown-detail-${campaign?.id}`}
-              >
-                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span
-                  className={
-                    daysLeftText === 'Ends today'
-                      ? 'text-amber-600 font-semibold'
-                      : daysLeftText === 'Campaign ended'
-                      ? 'text-gray-400 font-normal'
-                      : 'text-gray-700'
-                  }
-                >
-                  {daysLeftText}
+              {isUrgent && (
+                <span style={{ background:'#FEF2F2', color:'#B91C1C', fontSize:'0.72rem', fontWeight:700, padding:'4px 12px', borderRadius:999, border:'1px solid #FECACA' }}>
+                  ⏰ Ending soon
                 </span>
-                {campaign?.deadline && !isNaN(new Date(campaign.deadline).getTime()) && (
-                  <span className="text-gray-400 font-normal ml-1">
-                    ({new Date(campaign.deadline).toLocaleDateString()})
-                  </span>
-                )}
+              )}
+              <div style={{ marginLeft:'auto' }}>
+                <ShareButton campaign={campaign} variant="button" />
+              </div>
+            </div>
+
+            <h1 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'clamp(1.4rem,3vw,2rem)', fontWeight:900, color:'#7C2D12', margin:'0 0 14px', lineHeight:1.3 }}>
+              {campaign?.title}
+            </h1>
+            <p style={{ color:'#92400E', lineHeight:1.75, fontSize:'0.95rem', margin:0, whiteSpace:'pre-line' }}>
+              {campaign?.description}
+            </p>
+          </div>
+
+          {/* Progress card */}
+          <div style={{ background:'linear-gradient(135deg,#FFF7ED,#FFF0E8)', border:'1.5px solid #FED7AA', borderRadius:18, padding:'24px 28px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom:12 }}>
+              <div>
+                <span style={{ fontSize:'2rem', fontWeight:900, color:'#C2410C', fontVariantNumeric:'tabular-nums' }}>
+                  ₹{(Number(campaign?.raised_amount)||0).toLocaleString('en-IN')}
+                </span>
+                <span style={{ color:'#A16207', fontSize:'0.85rem', marginLeft:8 }}>raised</span>
+              </div>
+              <span style={{ color:'#78350F', fontSize:'0.875rem', fontWeight:600 }}>
+                Goal: ₹{(Number(campaign?.goal_amount)||0).toLocaleString('en-IN')}
               </span>
+            </div>
+            <div style={{ height:10, borderRadius:999, background:'#FED7AA', overflow:'hidden' }}>
+              <div style={{ height:'100%', borderRadius:999, width:`${progressPercent}%`, background:'linear-gradient(90deg,#C2410C,#EA580C,#F97316)', transition:'width 0.6s ease' }}
+                role="progressbar" aria-valuenow={progressPercent} aria-valuemin="0" aria-valuemax="100" />
+            </div>
+            <div style={{ display:'flex', justifyContent:'space-between', marginTop:8, fontSize:'0.8rem' }}>
+              <span style={{ fontWeight:800, color:'#EA580C' }}>{progressPercent}% funded</span>
+              <span style={{ color: isUrgent?'#B91C1C':'#A16207', fontWeight: isUrgent?700:400 }}>⏱ {daysLeftText}</span>
             </div>
           </div>
 
-          {/* Recent Donations */}
-          <div className="bg-white rounded-xl border border-gray-100 p-5 mt-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              Recent Donations
-            </h2>
-
-            {donationsLoading && (
-              <p className="text-gray-500 text-sm">Loading donations...</p>
+          {/* Recent donations */}
+          <div style={{ background:'#fff', border:'1.5px solid #FED7AA', borderRadius:18, padding:'24px 28px', boxShadow:'0 2px 12px rgba(194,65,12,0.05)' }}>
+            <h2 style={{ fontWeight:800, color:'#7C2D12', fontSize:'1rem', margin:'0 0 16px' }}>Recent Supporters</h2>
+            {donationsLoading && <p style={{ color:'#A16207', fontSize:'0.875rem' }}>Loading…</p>}
+            {!donationsLoading && donationsError && <p style={{ color:'#B91C1C', fontSize:'0.875rem' }}>{donationsError}</p>}
+            {!donationsLoading && !donationsError && donations.length === 0 && (
+              <p style={{ color:'#92400E', fontSize:'0.875rem', fontStyle:'italic' }}>
+                No donations yet. Be the first to support this campaign! 🙌
+              </p>
             )}
-
-            {!donationsLoading && donationsError && (
-              <p className="text-red-600 text-sm">{donationsError}</p>
-            )}
-
-            {!donationsLoading &&
-              !donationsError &&
-              donations.length === 0 && (
-                <p className="text-gray-500 text-sm">
-                  No completed donations yet. Be the first to support this campaign!
-                </p>
-              )}
-
             {!donationsLoading && !donationsError && donations.length > 0 && (
-              <div className="divide-y divide-gray-100">
-                {donations.map((donation) => (
-                  <div
-                    key={donation.id}
-                    className="flex items-center justify-between gap-4 py-3"
-                  >
-                    <div>
-                      <p className="font-medium text-gray-800">
-                        {donation.is_anonymous
-                          ? 'Anonymous'
-                          : donation.donor_name || 'Donor'}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {donation.created_at
-                          ? new Date(donation.created_at).toLocaleDateString('en-IN')
-                          : ''}
-                      </p>
+              <div style={{ display:'flex', flexDirection:'column', gap:1 }}>
+                {donations.map((d, i) => (
+                  <div key={d.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 0', borderBottom: i < donations.length-1 ? '1px solid #FEF3C7' : 'none' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                      <div style={{ width:32, height:32, borderRadius:'50%', background:'linear-gradient(135deg,#FFF7ED,#FED7AA)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.9rem', flexShrink:0 }}>
+                        {d.is_anonymous ? '🕵️' : '💛'}
+                      </div>
+                      <div>
+                        <p style={{ fontWeight:700, color:'#1C0A00', fontSize:'0.875rem', margin:0 }}>
+                          {d.is_anonymous ? 'Anonymous' : d.donor_name || 'Donor'}
+                        </p>
+                        <p style={{ color:'#A16207', fontSize:'0.72rem', margin:0 }}>
+                          {d.created_at ? new Date(d.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : ''}
+                        </p>
+                      </div>
                     </div>
-
-                    <span className="font-semibold text-indigo-600 whitespace-nowrap">
-                      ₹{Number(donation.amount || 0).toLocaleString('en-IN')}
+                    <span style={{ fontWeight:800, color:'#C2410C', fontSize:'0.95rem', fontVariantNumeric:'tabular-nums' }}>
+                      ₹{Number(d.amount||0).toLocaleString('en-IN')}
                     </span>
                   </div>
                 ))}
@@ -340,120 +199,109 @@ export default function CampaignDetail() {
           </div>
         </div>
 
-        {/* Donation Card */}
-        <div className="md:col-span-1">
-          <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 sticky top-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-1">Make a Micro-Donation</h2>
-            <p className="text-xs text-gray-500 mb-4">
-              Every rupee counts. Max donation is ₹500.
-            </p>
-
+        {/* Sticky donation card */}
+        <div style={{ gridColumn:'1' }} className="donation-card-col">
+          <div style={{ background:'#fff', border:'1.5px solid #FED7AA', borderRadius:18, padding:'28px 24px', boxShadow:'0 4px 24px rgba(194,65,12,0.1)', position:'sticky', top:80 }}>
             {paymentSuccess ? (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-center">
-                <div className="text-emerald-600 text-3xl mb-2">✓</div>
-                <h3 className="font-bold text-emerald-800 text-lg mb-1">Thank You!</h3>
-                <p className="text-xs text-emerald-700 mb-2">
-                  Your donation of ₹{paymentSuccess.amount} was verified and successful.
+              <div style={{ textAlign:'center', padding:'8px 0' }}>
+                <div style={{ fontSize:'3rem', marginBottom:12 }}>🎉</div>
+                <h3 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontWeight:900, color:'#7C2D12', fontSize:'1.2rem', margin:'0 0 8px' }}>
+                  Thank you!
+                </h3>
+                <p style={{ color:'#92400E', fontSize:'0.875rem', margin:'0 0 16px', lineHeight:1.6 }}>
+                  Your donation of <strong>₹{paymentSuccess.amount}</strong> was successful and is making a difference.
                 </p>
-                <div className="bg-white/80 rounded-md p-2.5 my-3 text-left text-xs border border-emerald-100 space-y-1">
-                  <div className="text-gray-600 flex justify-between">
-                    <span>Payment ID:</span>
-                    <span className="font-mono text-gray-800 break-all">{paymentSuccess.paymentId}</span>
+                <div style={{ background:'#FFF7ED', border:'1px solid #FED7AA', borderRadius:10, padding:'14px', textAlign:'left', fontSize:'0.78rem', marginBottom:16 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', gap:8, marginBottom:6 }}>
+                    <span style={{ color:'#A16207' }}>Payment ID:</span>
+                    <span style={{ color:'#1C0A00', fontWeight:600, wordBreak:'break-all', fontFamily:'monospace' }}>{paymentSuccess.paymentId}</span>
                   </div>
-                  <div className="text-gray-600 flex justify-between">
-                    <span>Receipt:</span>
-                    <span className="text-emerald-700 font-semibold">
-                      ✓ Emailed to registered address
-                    </span>
+                  <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
+                    <span style={{ color:'#A16207' }}>Receipt:</span>
+                    <span style={{ color:'#14532D', fontWeight:700 }}>✅ Emailed</span>
                   </div>
                 </div>
-                <button
-                  onClick={() => setPaymentSuccess(null)}
-                  className="mt-2 w-full text-xs text-indigo-600 hover:underline font-semibold"
-                >
+                <button onClick={() => setPaymentSuccess(null)} style={{ color:'#EA580C', background:'none', border:'none', cursor:'pointer', fontWeight:700, fontSize:'0.85rem', fontFamily:'inherit' }}>
                   Make another donation
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleDonate}>
+              <>
+                <h2 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontWeight:900, color:'#7C2D12', fontSize:'1.15rem', margin:'0 0 4px' }}>
+                  Make a difference
+                </h2>
+                <p style={{ color:'#A16207', fontSize:'0.78rem', margin:'0 0 20px' }}>Every rupee you give brings this campaign closer to its goal.</p>
+
                 {error && (
-                  <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-3 rounded-lg mb-4">
+                  <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', color:'#B91C1C', borderRadius:8, padding:'10px 12px', fontSize:'0.8rem', marginBottom:16 }}>
                     {error}
                   </div>
                 )}
 
-                {/* Preset Amount Buttons */}
-                <label className="block text-xs font-semibold text-gray-700 mb-2">
-                  Select Amount (₹1 – ₹500)
-                </label>
-                <div className="grid grid-cols-4 gap-2 mb-3">
-                  {[50, 100, 250, 500].map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setAmount(preset)}
-                      className={`py-2 text-xs font-bold rounded-lg border transition-all ${
-                        amount === preset
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                          : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-                      }`}
-                    >
-                      ₹{preset}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Custom Input */}
-                <div className="relative mb-4">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500 text-sm font-semibold">
-                    ₹
-                  </span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="500"
-                    value={amount}
-                    onChange={(e) => setAmount(Number(e.target.value))}
-                    required
-                    placeholder="Custom amount (1-500)"
-                    className="w-full pl-8 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                  />
-                </div>
-
-                {/* Anonymous Donation Toggle */}
-                <div className="flex items-center gap-2 mb-5">
-                  <input
-                    type="checkbox"
-                    id="isAnonymous"
-                    checked={isAnonymous}
-                    onChange={(e) => setIsAnonymous(e.target.checked)}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="isAnonymous" className="text-xs text-gray-600 select-none cursor-pointer">
-                    Donate anonymously
+                <form onSubmit={handleDonate}>
+                  <label style={{ fontSize:'0.78rem', fontWeight:700, color:'#78350F', display:'block', marginBottom:8 }}>
+                    Select amount (₹1 – ₹500)
                   </label>
-                </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginBottom:12 }}>
+                    {PRESET_AMOUNTS.map(p => (
+                      <button key={p} type="button" onClick={() => setAmount(p)}
+                        style={{ padding:'9px 4px', borderRadius:8, border:'none', cursor:'pointer', fontSize:'0.82rem', fontWeight:800,
+                          background: amount===p ? 'linear-gradient(135deg,#C2410C,#EA580C)' : '#FFF7ED',
+                          color: amount===p ? '#fff' : '#92400E',
+                          boxShadow: amount===p ? '0 2px 8px rgba(194,65,12,0.25)' : 'none',
+                          fontFamily:'inherit',
+                        }}>₹{p}</button>
+                    ))}
+                  </div>
 
-                {/* Submit / Open Razorpay Checkout */}
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-3 px-4 rounded-lg font-bold text-sm shadow-md transition-all flex justify-center items-center gap-2"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      <span>Opening Razorpay...</span>
-                    </>
-                  ) : (
-                    <span>Donate ₹{amount || 0} with Razorpay</span>
-                  )}
-                </button>
-              </form>
+                  <div style={{ position:'relative', marginBottom:16 }}>
+                    <span style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', color:'#A16207', fontWeight:700, fontSize:'0.9rem', pointerEvents:'none' }}>₹</span>
+                    <input type="number" min="1" max="500" value={amount}
+                      onChange={e => setAmount(Number(e.target.value))} required
+                      placeholder="Custom amount"
+                      style={{ width:'100%', paddingLeft:28, paddingRight:12, paddingTop:10, paddingBottom:10, border:'1.5px solid #FED7AA', borderRadius:10, fontSize:'0.9rem', background:'#FFF7ED', color:'#1C0A00', outline:'none', boxSizing:'border-box', fontFamily:'inherit' }}
+                      onFocus={e => e.target.style.borderColor = '#EA580C'}
+                      onBlur={e => e.target.style.borderColor = '#FED7AA'}
+                    />
+                  </div>
+
+                  <label style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer', marginBottom:20 }}>
+                    <input type="checkbox" id="isAnonymous" checked={isAnonymous} onChange={e => setIsAnonymous(e.target.checked)}
+                      style={{ width:16, height:16, accentColor:'#EA580C', cursor:'pointer' }} />
+                    <span style={{ fontSize:'0.82rem', color:'#78350F', fontWeight:500 }}>Donate anonymously</span>
+                  </label>
+
+                  <button type="submit" disabled={isSubmitting} style={{
+                    width:'100%', background: isSubmitting ? '#FCA5A5' : 'linear-gradient(135deg,#C2410C,#EA580C)',
+                    color:'#fff', border:'none', borderRadius:10,
+                    padding:'13px', fontWeight:800, fontSize:'0.95rem',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    boxShadow:'0 4px 16px rgba(194,65,12,0.3)',
+                    display:'flex', justifyContent:'center', alignItems:'center', gap:8, fontFamily:'inherit',
+                  }}>
+                    {isSubmitting ? (
+                      <><div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,0.4)', borderTop:'2px solid #fff', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} /><span>Opening payment…</span></>
+                    ) : (
+                      <span>Donate ₹{amount || 0} →</span>
+                    )}
+                  </button>
+                </form>
+                <p style={{ textAlign:'center', fontSize:'0.7rem', color:'#A16207', marginTop:10 }}>
+                  Secure payment via Razorpay
+                </p>
+              </>
             )}
           </div>
         </div>
       </div>
+
+      <style>{`
+        @keyframes spin{to{transform:rotate(360deg)}}
+        @media (min-width:768px) {
+          .campaign-detail-grid { grid-template-columns: 1fr 340px !important; }
+          .donation-card-col { grid-column: 2 !important; grid-row: 1 !important; }
+        }
+      `}</style>
     </div>
   );
 }

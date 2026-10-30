@@ -98,12 +98,12 @@ export default function ShareButton({ campaign, variant = 'button', className = 
           title="Share Campaign"
           aria-label="Share campaign"
           id={`share-btn-${campaign?.id}`}
-          className={`p-2.5 rounded-lg border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer ${
+          className={`p-2.5 rounded-lg border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-orange-400 cursor-pointer ${
             isSuccess
               ? 'bg-emerald-50 text-emerald-600 border-emerald-300'
               : isError
               ? 'bg-rose-50 text-rose-600 border-rose-300'
-              : 'bg-white text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 border-gray-200 shadow-sm'
+              : 'bg-orange-50 text-orange-600 hover:bg-orange-100 border-orange-200 shadow-sm'
           } ${className}`}
         >
           {isSuccess ? (
@@ -150,12 +150,12 @@ export default function ShareButton({ campaign, variant = 'button', className = 
         disabled={isSharing}
         aria-label="Share campaign"
         id={`share-btn-${campaign?.id}`}
-        className={`inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg border transition-all duration-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer ${
+        className={`inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg border transition-all duration-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400 cursor-pointer ${
           isSuccess
             ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
             : isError
             ? 'bg-rose-50 text-rose-700 border-rose-300'
-            : 'bg-white text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 border-gray-200'
+            : 'bg-orange-50 text-orange-700 hover:bg-orange-100 border-orange-200'
         } ${className}`}
       >
         {isSuccess ? (
@@ -174,7 +174,7 @@ export default function ShareButton({ campaign, variant = 'button', className = 
           </>
         ) : (
           <>
-            <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
