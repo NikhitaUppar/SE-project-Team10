@@ -2,315 +2,204 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import CampaignCard from '../components/campaign/CampaignCard';
 
-const CATEGORIES = [
-  'All',
-  'Healthcare',
-  'Education',
-  'Relief',
-  'Animals',
-  'Community',
-  'Environment',
-];
+const CATEGORIES = ['All', 'Healthcare', 'Education', 'Relief', 'Animals', 'Community', 'Environment'];
+const CAT_ICONS = { Healthcare:'🏥', Education:'📚', Relief:'🤝', Animals:'🐾', Community:'🏘️', Environment:'🌱', All:'✨' };
 
 export default function Campaigns() {
-  const [campaigns, setCampaigns] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 9,
-    total: 0,
-    totalPages: 1,
-  });
+  const [campaigns, setCampaigns]       = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState(null);
+  const [selectedCategory, setCategory] = useState('All');
+  const [searchQuery, setSearchQuery]   = useState('');
+  const [page, setPage]                 = useState(1);
+  const [pagination, setPagination]     = useState({ page:1, limit:9, total:0, totalPages:1 });
 
   const fetchCampaigns = useCallback(async (cat, p, q) => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
-      const params = {
-        page: p,
-        limit: 9,
-      };
-
-      if (cat && cat !== 'All') {
-        params.category = cat;
-      }
-
-      if (q && q.trim()) {
-        params.search = q.trim();
-      }
-
+      const params = { page: p, limit: 9 };
+      if (cat && cat !== 'All') params.category = cat;
+      if (q && q.trim()) params.search = q.trim();
       const res = await api.get('/campaigns', { params });
-
-      // Support both { campaigns: [...], pagination: {...} } and direct array responses
       if (res.data?.campaigns) {
         setCampaigns(res.data.campaigns);
-        if (res.data.pagination) {
-          setPagination(res.data.pagination);
-        }
+        if (res.data.pagination) setPagination(res.data.pagination);
       } else if (Array.isArray(res.data)) {
         setCampaigns(res.data);
-        setPagination({
-          page: p,
-          limit: 9,
-          total: res.data.length,
-          totalPages: Math.max(1, Math.ceil(res.data.length / 9)),
-        });
-      } else {
-        setCampaigns([]);
-      }
+        setPagination({ page:p, limit:9, total:res.data.length, totalPages: Math.max(1, Math.ceil(res.data.length/9)) });
+      } else setCampaigns([]);
     } catch (err) {
-      console.error('Failed to load campaigns:', err);
       setError(err.response?.data?.error || 'Unable to load campaigns. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => {
-    fetchCampaigns(selectedCategory, page, searchQuery);
-  }, [selectedCategory, page, fetchCampaigns]);
+  useEffect(() => { fetchCampaigns(selectedCategory, page, searchQuery); }, [selectedCategory, page, fetchCampaigns]);
 
-  const handleCategoryChange = (category) => {
-    setSelectedCategory(category);
-    setPage(1);
-  };
-
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    setPage(1);
-    fetchCampaigns(selectedCategory, 1, searchQuery);
-  };
-
-  const handleClearFilters = () => {
-    setSelectedCategory('All');
-    setSearchQuery('');
-    setPage(1);
-    fetchCampaigns('All', 1, '');
-  };
+  const handleCategory = (c) => { setCategory(c); setPage(1); };
+  const handleSearch   = (e) => { e.preventDefault(); setPage(1); fetchCampaigns(selectedCategory, 1, searchQuery); };
+  const handleClear    = () => { setCategory('All'); setSearchQuery(''); setPage(1); fetchCampaigns('All', 1, ''); };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Header Section */}
-      <div className="text-center max-w-3xl mx-auto mb-10">
-        <span className="text-indigo-600 font-semibold tracking-wide uppercase text-xs px-3 py-1 bg-indigo-50 rounded-full inline-block mb-3">
-          Micro-Donation Platform
-        </span>
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
-          Explore Active Campaigns
+    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px max(16px, env(safe-area-inset-left, 0px)) 64px' }}>
+
+      {/* Header */}
+      <div style={{ textAlign: 'center', maxWidth: 600, margin: '0 auto 40px' }}>
+        <span style={{
+          display: 'inline-block', background: '#FFF7ED', border: '1px solid #FED7AA',
+          color: '#C2410C', fontSize: '0.7rem', fontWeight: 700,
+          letterSpacing: '0.12em', textTransform: 'uppercase',
+          padding: '5px 14px', borderRadius: 999, marginBottom: 14,
+        }}>Micro-Donation Platform</span>
+        <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 'clamp(1.8rem,4vw,2.6rem)', fontWeight: 900, color: '#7C2D12', margin: '0 0 12px', textWrap: 'balance' }}>
+          Find Your Cause
         </h1>
-        <p className="mt-3 text-base sm:text-lg text-gray-500">
-          Make a real difference with micro-donations between ?1 and ?500. Support verified causes and track their live progress.
+        <p style={{ color: '#92400E', fontSize: '1rem', lineHeight: 1.6, margin: 0 }}>
+          Browse verified campaigns and make a real difference — ₹1 to ₹500 at a time.
         </p>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          {/* Category Filter Pills (FR-17) */}
-          <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Campaign Categories">
-            {CATEGORIES.map((category) => {
-              const isActive = selectedCategory === category;
+      {/* Filter + Search bar */}
+      <div style={{ background: '#fff', border: '1.5px solid #FED7AA', borderRadius: 16, padding: '20px 24px', marginBottom: 32, boxShadow: '0 2px 12px rgba(194,65,12,0.06)' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* Category pills */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }} role="tablist">
+            {CATEGORIES.map(cat => {
+              const active = selectedCategory === cat;
               return (
-                <button
-                  key={category}
-                  onClick={() => handleCategoryChange(category)}
-                  className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 cursor-pointer ${
-                    isActive
-                      ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200 scale-102'
-                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                  }`}
-                  role="tab"
-                  aria-selected={isActive}
-                  id={`filter-${category.toLowerCase()}`}
-                >
-                  {category}
+                <button key={cat} onClick={() => handleCategory(cat)} role="tab" aria-selected={active}
+                  style={{
+                    padding: '7px 16px', borderRadius: 999, border: 'none', cursor: 'pointer',
+                    fontSize: '0.8rem', fontWeight: 700,
+                    background: active ? 'linear-gradient(135deg,#C2410C,#EA580C)' : '#FFF7ED',
+                    color: active ? '#fff' : '#92400E',
+                    boxShadow: active ? '0 2px 8px rgba(194,65,12,0.25)' : 'none',
+                    transition: 'all 0.15s',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                  }}>
+                  <span>{CAT_ICONS[cat]}</span><span>{cat}</span>
                 </button>
               );
             })}
           </div>
 
-          {/* Search Box */}
-          <form onSubmit={handleSearchSubmit} className="relative min-w-[240px] sm:min-w-[280px]">
+          {/* Search */}
+          <form onSubmit={handleSearch} style={{ position: 'relative', minWidth: 240 }}>
+            <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#A16207', fontSize: '0.9rem' }}>🔍</span>
             <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              type="text" value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search campaigns..."
-              className="w-full pl-10 pr-10 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
-              id="search-campaigns-input"
+              style={{
+                width: '100%', paddingLeft: 36, paddingRight: searchQuery ? 36 : 12,
+                paddingTop: 9, paddingBottom: 9,
+                border: '1.5px solid #FED7AA', borderRadius: 10,
+                fontSize: '0.85rem', background: '#FFF7ED', color: '#7C2D12',
+                outline: 'none', boxSizing: 'border-box',
+              }}
+              onFocus={e => e.target.style.borderColor = '#EA580C'}
+              onBlur={e => e.target.style.borderColor = '#FED7AA'}
             />
-            <svg
-              className="w-4 h-4 text-gray-400 absolute left-3.5 top-3"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
             {searchQuery && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery('');
-                  setPage(1);
-                  fetchCampaigns(selectedCategory, 1, '');
-                }}
-                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 text-sm"
-                title="Clear search"
-              >
-                &times;
+              <button type="button" onClick={() => { setSearchQuery(''); setPage(1); fetchCampaigns(selectedCategory, 1, ''); }}
+                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#A16207', fontSize: '1rem' }}>
+                ×
               </button>
             )}
           </form>
         </div>
 
-        {/* Active Filter Summary Bar */}
-        <div className="flex items-center justify-between text-xs text-gray-500 mt-4 pt-3 border-t border-gray-100">
+        {/* Active filter summary */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 12, borderTop: '1px solid #FED7AA', fontSize: '0.78rem', color: '#92400E' }}>
           <span>
-            Showing <strong className="text-gray-800">{pagination.total}</strong> active {pagination.total === 1 ? 'campaign' : 'campaigns'}
-            {selectedCategory !== 'All' && (
-              <> in <span className="font-semibold text-indigo-600">{selectedCategory}</span></>
-            )}
-            {searchQuery && (
-              <> matching &ldquo;{searchQuery}&rdquo;</>
-            )}
+            Showing <strong style={{ color: '#7C2D12' }}>{pagination.total}</strong> campaign{pagination.total !== 1 ? 's' : ''}
+            {selectedCategory !== 'All' && <> in <span style={{ color: '#C2410C', fontWeight: 700 }}>{selectedCategory}</span></>}
+            {searchQuery && <> matching "<em>{searchQuery}</em>"</>}
           </span>
           {(selectedCategory !== 'All' || searchQuery) && (
-            <button
-              onClick={handleClearFilters}
-              className="text-indigo-600 hover:text-indigo-800 font-medium underline cursor-pointer"
-            >
+            <button onClick={handleClear} style={{ color: '#EA580C', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.78rem' }}>
               Reset filters
             </button>
           )}
         </div>
       </div>
 
-      {/* Error Alert */}
+      {/* Error */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-xl mb-8 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <svg className="w-5 h-5 text-red-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-            <span>{error}</span>
-          </div>
-          <button
-            onClick={() => fetchCampaigns(selectedCategory, page, searchQuery)}
-            className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
-          >
+        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#991B1B', borderRadius: 12, padding: '14px 20px', marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>{error}</span>
+          <button onClick={() => fetchCampaigns(selectedCategory, page, searchQuery)}
+            style={{ background: '#EF4444', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700 }}>
             Retry
           </button>
         </div>
       )}
 
-      {/* Loading Skeleton Grid */}
+      {/* Loading skeletons */}
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm animate-pulse">
-              <div className="h-48 bg-gray-200"></div>
-              <div className="p-5 space-y-4">
-                <div className="h-5 bg-gray-200 rounded w-3/4"></div>
-                <div className="space-y-2">
-                  <div className="h-3 bg-gray-200 rounded"></div>
-                  <div className="h-3 bg-gray-200 rounded w-5/6"></div>
-                </div>
-                <div className="pt-4 border-t border-gray-100 space-y-3">
-                  <div className="flex justify-between">
-                    <div className="h-4 bg-gray-200 rounded w-1/4"></div>
-                    <div className="h-4 bg-gray-200 rounded w-1/4"></div>
-                  </div>
-                  <div className="h-2.5 bg-gray-200 rounded-full"></div>
-                  <div className="h-9 bg-gray-200 rounded-lg mt-2"></div>
-                </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px,1fr))', gap: 24 }}>
+          {[...Array(6)].map((_,i) => (
+            <div key={i} style={{ background: '#fff', borderRadius: 16, border: '1.5px solid #FED7AA', overflow: 'hidden' }}>
+              <div style={{ height: 188, background: '#FFF7ED', opacity: 0.6 }} />
+              <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {[70,100,55,80].map((w,j) => (
+                  <div key={j} style={{ height: j===0?18:12, background: '#FED7AA', borderRadius: 6, width:`${w}%`, opacity:0.5, animation:'pulse 1.5s ease-in-out infinite' }} />
+                ))}
               </div>
             </div>
           ))}
         </div>
       ) : campaigns.length === 0 ? (
-        /* Empty State */
-        <div className="bg-white rounded-2xl border border-dashed border-gray-300 p-12 text-center max-w-xl mx-auto my-8">
-          <div className="w-16 h-16 mx-auto mb-4 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600">
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-            </svg>
-          </div>
-          <h3 className="text-lg font-bold text-gray-900 mb-1">No Active Campaigns Found</h3>
-          <p className="text-sm text-gray-500 mb-6">
+        <div style={{ background: '#fff', border: '2px dashed #FED7AA', borderRadius: 20, padding: '60px 32px', textAlign: 'center', maxWidth: 480, margin: '0 auto' }}>
+          <div style={{ fontSize: '3rem', marginBottom: 16 }}>🌱</div>
+          <h3 style={{ fontWeight: 800, color: '#7C2D12', marginBottom: 8 }}>No Campaigns Found</h3>
+          <p style={{ color: '#92400E', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: 24 }}>
             {selectedCategory !== 'All'
-              ? `There are currently no active campaigns in the "${selectedCategory}" category.`
-              : 'There are currently no active campaigns to display.'}
+              ? `No active campaigns in "${selectedCategory}" right now.`
+              : 'No active campaigns yet.'}
           </p>
           {(selectedCategory !== 'All' || searchQuery) && (
-            <button
-              onClick={handleClearFilters}
-              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors shadow-sm"
-            >
-              Clear all filters
+            <button onClick={handleClear} style={{
+              background: 'linear-gradient(135deg,#C2410C,#EA580C)', color: '#fff',
+              border: 'none', borderRadius: 10, padding: '10px 24px',
+              fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem',
+            }}>
+              Clear filters
             </button>
           )}
         </div>
       ) : (
-        /* Campaign Card Grid (FR-16) */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-          {campaigns.map((campaign) => (
-            <CampaignCard key={campaign.id} campaign={campaign} />
-          ))}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px,1fr))', gap: 24 }}>
+          {campaigns.map(c => <CampaignCard key={c.id} campaign={c} />)}
         </div>
       )}
 
-      {/* Pagination Controls */}
+      {/* Pagination */}
       {pagination.totalPages > 1 && (
-        <div className="mt-12 flex justify-center items-center gap-2">
-          <button
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            disabled={page === 1}
-            className={`px-4 py-2 rounded-lg text-sm font-medium border ${
-              page === 1
-                ? 'border-gray-200 text-gray-300 cursor-not-allowed'
-                : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            &larr; Previous
+        <div style={{ marginTop: 48, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
+          <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1}
+            style={{ padding: '8px 18px', borderRadius: 8, border: '1.5px solid #FED7AA', background: page===1?'#FFF7ED':'#fff', color: page===1?'#FCA5A5':'#92400E', fontWeight: 600, cursor: page===1?'not-allowed':'pointer', fontSize: '0.85rem' }}>
+            ← Prev
           </button>
-
-          <div className="flex items-center gap-1">
-            {[...Array(pagination.totalPages)].map((_, i) => {
-              const p = i + 1;
-              return (
-                <button
-                  key={p}
-                  onClick={() => setPage(p)}
-                  className={`w-9 h-9 rounded-lg text-sm font-semibold transition-colors ${
-                    page === p
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-gray-600 hover:bg-gray-100'
-                  }`}
-                >
-                  {p}
-                </button>
-              );
-            })}
-          </div>
-
-          <button
-            onClick={() => setPage((prev) => Math.min(pagination.totalPages, prev + 1))}
-            disabled={page === pagination.totalPages}
-            className={`px-4 py-2 rounded-lg text-sm font-medium border ${
-              page === pagination.totalPages
-                ? 'border-gray-200 text-gray-300 cursor-not-allowed'
-                : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            Next &rarr;
+          {[...Array(pagination.totalPages)].map((_,i) => {
+            const p = i+1;
+            return (
+              <button key={p} onClick={() => setPage(p)}
+                style={{ width: 36, height: 36, borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem',
+                  background: page===p ? 'linear-gradient(135deg,#C2410C,#EA580C)' : 'transparent',
+                  color: page===p ? '#fff' : '#92400E',
+                }}>
+                {p}
+              </button>
+            );
+          })}
+          <button onClick={() => setPage(p => Math.min(pagination.totalPages, p+1))} disabled={page===pagination.totalPages}
+            style={{ padding: '8px 18px', borderRadius: 8, border: '1.5px solid #FED7AA', background: page===pagination.totalPages?'#FFF7ED':'#fff', color: page===pagination.totalPages?'#FCA5A5':'#92400E', fontWeight: 600, cursor: page===pagination.totalPages?'not-allowed':'pointer', fontSize: '0.85rem' }}>
+            Next →
           </button>
         </div>
       )}
+
+      <style>{`@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}`}</style>
     </div>
   );
 }
