@@ -3,152 +3,151 @@ import { Link } from 'react-router-dom';
 import ShareButton from './ShareButton';
 import { getRemainingDaysText } from '../../utils/dateUtils';
 
+const CATEGORY_COLORS = {
+  Healthcare: { bg: '#FFF0F0', text: '#991B1B', dot: '#EF4444' },
+  Education:  { bg: '#FFF7ED', text: '#9A3412', dot: '#F97316' },
+  Relief:     { bg: '#FFFBEB', text: '#92400E', dot: '#F59E0B' },
+  Animals:    { bg: '#F0FDF4', text: '#14532D', dot: '#22C55E' },
+  Community:  { bg: '#EFF6FF', text: '#1E3A8A', dot: '#3B82F6' },
+  Environment:{ bg: '#F0FDF4', text: '#064E3B', dot: '#10B981' },
+};
+
 export default function CampaignCard({ campaign }) {
   const [imgError, setImgError] = useState(false);
 
-  const goal = Number(campaign?.goal_amount) || 0;
+  const goal   = Number(campaign?.goal_amount) || 0;
   const raised = Number(campaign?.raised_amount) || 0;
-  const progress = Math.min(
-    100,
+  const progress = Math.min(100,
     campaign?.progress_percentage !== undefined
       ? Number(campaign.progress_percentage)
-      : goal > 0
-      ? Math.round((raised / goal) * 100)
-      : 0
+      : goal > 0 ? Math.round((raised / goal) * 100) : 0
   );
 
   const daysLeftText = getRemainingDaysText(campaign);
-
-  // Get image URL or fallback placeholder
   const imageUrl = !imgError && (campaign?.image_url || campaign?.campaign_files?.[0]?.file_url);
+  const catColor = CATEGORY_COLORS[campaign?.category] || { bg: '#FFF7ED', text: '#92400E', dot: '#EA580C' };
+
+  const urgentDays = typeof daysLeftText === 'string' && daysLeftText.match(/^(\d+) day/);
+  const isUrgent = daysLeftText === 'Ends today' || (urgentDays && Number(urgentDays[1]) <= 3);
 
   return (
-    <div className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 flex flex-col overflow-hidden group">
-      {/* Thumbnail Image Header */}
-      <div className="relative h-48 w-full bg-gradient-to-tr from-indigo-100 via-purple-50 to-indigo-50 overflow-hidden">
+    <div style={{
+      background: '#fff',
+      borderRadius: 16,
+      border: `1.5px solid ${isUrgent ? '#FCA5A5' : '#FED7AA'}`,
+      boxShadow: '0 2px 12px rgba(194,65,12,0.07)',
+      display: 'flex', flexDirection: 'column',
+      overflow: 'hidden',
+      transition: 'transform 0.2s, box-shadow 0.2s',
+    }}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 28px rgba(194,65,12,0.14)'; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(194,65,12,0.07)'; }}
+    >
+      {/* Image / placeholder */}
+      <div style={{ position: 'relative', height: 188, overflow: 'hidden', background: 'linear-gradient(135deg, #FFF7ED, #FFF0E8)' }}>
         {imageUrl ? (
           <img
-            src={imageUrl}
-            alt={campaign?.title || 'Campaign'}
+            src={imageUrl} alt={campaign?.title || 'Campaign'}
             onError={() => setImgError(true)}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            loading="lazy"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.4s' }}
           />
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-indigo-400 p-4">
-            <svg
-              className="w-12 h-12 mb-1 opacity-70"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.5"
-                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-              />
-            </svg>
-            <span className="text-xs font-medium text-indigo-600/70 uppercase tracking-wider">
-              {campaign?.category || 'Micro Cause'}
+          <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <span style={{ fontSize: '2.5rem', opacity: 0.6 }}>
+              {campaign?.category === 'Healthcare' ? '🏥' :
+               campaign?.category === 'Education' ? '📚' :
+               campaign?.category === 'Animals' ? '🐾' :
+               campaign?.category === 'Environment' ? '🌱' :
+               campaign?.category === 'Relief' ? '🤝' : '🧡'}
+            </span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              {campaign?.category || 'Cause'}
             </span>
           </div>
         )}
 
-        {/* Category Pill Badge */}
-        <span className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm text-indigo-700 text-xs font-semibold px-2.5 py-1 rounded-full shadow-sm border border-indigo-50 uppercase tracking-wider">
+        {/* Category badge */}
+        <span style={{
+          position: 'absolute', top: 12, left: 12,
+          background: catColor.bg, color: catColor.text,
+          fontSize: '0.68rem', fontWeight: 700,
+          padding: '4px 10px', borderRadius: 999,
+          display: 'flex', alignItems: 'center', gap: 4,
+          border: `1px solid ${catColor.dot}33`,
+        }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: catColor.dot, display: 'inline-block' }} />
           {campaign?.category || 'General'}
         </span>
 
-        {/* Status Pill Badge */}
-        <span
-          className={`absolute top-3 right-3 text-xs font-medium px-2.5 py-1 rounded-full shadow-sm capitalize ${
-            campaign?.status === 'active'
-              ? 'bg-emerald-500/90 text-white'
-              : 'bg-gray-600/90 text-white'
-          }`}
-        >
-          {campaign?.status || 'Active'}
-        </span>
+        {/* Urgent badge */}
+        {isUrgent && (
+          <span style={{
+            position: 'absolute', top: 12, right: 12,
+            background: '#FEF2F2', color: '#B91C1C',
+            fontSize: '0.68rem', fontWeight: 700,
+            padding: '4px 10px', borderRadius: 999,
+            border: '1px solid #FECACA',
+          }}>
+            ⏰ Urgent
+          </span>
+        )}
       </div>
 
-      {/* Card Body */}
-      <div className="p-5 flex-1 flex flex-col justify-between">
+      {/* Body */}
+      <div style={{ padding: '18px 20px 20px', flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div>
-          {/* Campaign Title */}
-          <h3 className="font-bold text-gray-900 text-lg line-clamp-2 leading-snug group-hover:text-indigo-600 transition-colors">
-            <Link to={`/campaigns/${campaign?.id}`}>
+          <h3 style={{ fontWeight: 700, fontSize: '1rem', lineHeight: 1.4, margin: 0 }}>
+            <Link to={`/campaigns/${campaign?.id}`} style={{ color: '#1C0A00', textDecoration: 'none' }}>
               {campaign?.title || 'Untitled Campaign'}
             </Link>
           </h3>
-
-          {/* Description Excerpt */}
-          <p className="text-gray-500 text-sm mt-2 line-clamp-2 leading-relaxed">
-            {campaign?.description || 'Support this verified community initiative with a micro-donation.'}
+          <p style={{ fontSize: '0.82rem', color: '#92400E', marginTop: 6, lineHeight: 1.55,
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {campaign?.description || 'Support this verified community initiative.'}
           </p>
         </div>
 
-        {/* Progress & Fundraising Stats */}
-        <div className="mt-5 pt-4 border-t border-gray-100">
-          <div className="flex justify-between items-baseline mb-2 text-sm">
-            <div>
-              <span className="font-bold text-gray-900 text-base">
+        {/* Progress */}
+        <div style={{ marginTop: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+            <span>
+              <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#C2410C' }}>
                 ₹{raised.toLocaleString('en-IN')}
               </span>
-              <span className="text-xs text-gray-500 ml-1">raised</span>
-            </div>
-            <div className="text-right">
-              <span className="text-xs text-gray-500">Goal: </span>
-              <span className="font-semibold text-gray-700">
-                ₹{goal.toLocaleString('en-IN')}
-              </span>
-            </div>
-          </div>
-
-          {/* Real-time Progress Bar */}
-          <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-            <div
-              className="bg-indigo-600 h-2.5 rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${progress}%` }}
-              role="progressbar"
-              aria-valuenow={progress}
-              aria-valuemin="0"
-              aria-valuemax="100"
-            ></div>
-          </div>
-
-          {/* Progress % and Days Left Countdown */}
-          <div className="flex justify-between items-center text-xs text-gray-500 mt-2 font-medium">
-            <span className="text-indigo-600 font-semibold">{progress}% funded</span>
-            <span
-              className="flex items-center gap-1"
-              id={`countdown-${campaign?.id}`}
-              title={campaign?.deadline ? `Deadline: ${new Date(campaign.deadline).toLocaleDateString()}` : 'Ongoing'}
-            >
-              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span
-                className={
-                  daysLeftText === 'Ends today'
-                    ? 'text-amber-600 font-semibold'
-                    : daysLeftText === 'Campaign ended'
-                    ? 'text-gray-400 font-normal'
-                    : 'text-gray-600'
-                }
-              >
-                {daysLeftText}
-              </span>
+              <span style={{ fontSize: '0.72rem', color: '#92400E', marginLeft: 4 }}>raised</span>
+            </span>
+            <span style={{ fontSize: '0.72rem', color: '#A16207' }}>
+              of ₹{goal.toLocaleString('en-IN')}
             </span>
           </div>
 
-          {/* Action Buttons */}
-          <div className="mt-4 flex items-center gap-2">
-            <Link
-              to={`/campaigns/${campaign?.id}`}
-              className="flex-1 block text-center bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white font-medium py-2.5 px-4 rounded-lg transition-colors duration-200 text-sm shadow-sm"
-              id={`donate-btn-${campaign?.id}`}
-            >
+          {/* Track */}
+          <div style={{ height: 6, borderRadius: 999, background: '#FED7AA', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', borderRadius: 999,
+              width: `${progress}%`,
+              background: progress >= 80 ? 'linear-gradient(90deg,#EA580C,#F97316)' : 'linear-gradient(90deg,#C2410C,#EA580C)',
+              transition: 'width 0.6s ease',
+            }} role="progressbar" aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100" />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: '0.72rem' }}>
+            <span style={{ fontWeight: 700, color: '#EA580C' }}>{progress}% funded</span>
+            <span style={{ color: isUrgent ? '#B91C1C' : '#A16207', fontWeight: isUrgent ? 700 : 400 }}>
+              {daysLeftText}
+            </span>
+          </div>
+
+          {/* Action row */}
+          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+            <Link to={`/campaigns/${campaign?.id}`} style={{
+              flex: 1, textAlign: 'center',
+              background: 'linear-gradient(135deg, #C2410C, #EA580C)',
+              color: '#fff', textDecoration: 'none',
+              fontWeight: 700, fontSize: '0.82rem',
+              padding: '9px 0', borderRadius: 8,
+              boxShadow: '0 2px 8px rgba(194,65,12,0.25)',
+            }}>
               Donate Now
             </Link>
             <ShareButton campaign={campaign} variant="icon" />
