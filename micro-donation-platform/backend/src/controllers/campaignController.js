@@ -357,11 +357,98 @@ const postUpdate = async (req, res) => {
 
 // FR-20: Get campaign stats (owner only)
 const getCampaignStats = async (req, res) => {
-  // TODO (ramithanayak98-ar): Implement
-  // 1. Verify req.user.id === campaign.owner_id
-  // 2. Aggregate total raised, donor count from 'donations'
-  // 3. Return timeline data grouped by date
-  res.status(501).json({ error: 'Not implemented yet' });
+  try {
+    const { id } = req.params;
+    const ownerId = req.user?.id;
+
+    if (!ownerId) {
+      return res.status(401).json({
+        error: 'Authentication required',
+      });
+    }
+
+    const { data: campaign, error: campaignError } = await supabase
+      .from('campaigns')
+      .select('id, owner_id, title, goal_amount, raised_amount')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (campaignError) throw campaignError;
+
+    if (!campaign) {
+      return res.status(404).json({
+        error: 'Campaign not found',
+      });
+    }
+
+    if (campaign.owner_id !== ownerId) {
+      return res.status(403).json({
+        error: 'You are not authorized to view these campaign stats',
+      });
+    }
+
+    const { data: donations, error: donationsError } = await supabase
+      .from('donations')
+      .select('amount, donor_id, created_at')
+      .eq('campaign_id', id)
+      .eq('status', 'completed')
+      .order('created_at', { ascending: true });
+
+    if (donationsError) throw donationsError;
+
+    const completedDonations = donations || [];
+
+    const totalRaised = completedDonations.reduce(
+      (sum, donation) => sum + Number(donation.amount || 0),
+      0
+    );
+
+    const donorCount = new Set(
+      completedDonations
+        .map((donation) => donation.donor_id)
+        .filter(Boolean)
+    ).size;
+
+    const goal = Number(campaign.goal_amount) || 0;
+    const raised = Number(campaign.raised_amount) || 0;
+
+    const timelineMap = {};
+
+    completedDonations.forEach((donation) => {
+      const donationDate = donation.created_at
+        ? donation.created_at.slice(0, 10)
+        : 'Unknown';
+
+      timelineMap[donationDate] =
+        (timelineMap[donationDate] || 0) + Number(donation.amount || 0);
+    });
+
+    const timeline = Object.entries(timelineMap).map(([date, amount]) => ({
+      date,
+      amount,
+    }));
+
+    return res.status(200).json({
+      campaign: {
+        id: campaign.id,
+        title: campaign.title,
+        goal_amount: goal,
+        raised_amount: raised,
+        progress_percentage:
+          goal > 0 ? Math.min(100, Math.round((raised / goal) * 100)) : 0,
+      },
+      stats: {
+        total_raised: totalRaised,
+        donor_count: donorCount,
+      },
+      timeline,
+    });
+  } catch (err) {
+    console.error('getCampaignStats error:', err.message);
+    return res.status(500).json({
+      error: 'Failed to fetch campaign statistics',
+    });
+  }
 };
 
 // FR-33: Admin verifies a campaign (sets is_verified = true)
