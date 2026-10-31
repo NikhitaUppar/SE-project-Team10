@@ -101,7 +101,21 @@ export default function CampaignDetail() {
 
   const progressPercent = Math.min(100, Math.round(((campaign?.raised_amount||0)/(campaign?.goal_amount||1))*100));
   const daysLeftText = getRemainingDaysText(campaign);
-  const isUrgent = daysLeftText === 'Ends today' || /^[1-3] day/.test(daysLeftText);
+  const daysLeftNum = (() => {
+    if (daysLeftText === 'Ends today') return 0;
+    const m = daysLeftText.match(/^(\d+) day/);
+    return m ? parseInt(m[1], 10) : null;
+  })();
+  const isUrgent = daysLeftNum !== null && daysLeftNum < 7;
+
+  const impactStatements = Array.isArray(campaign?.impact_statements) ? campaign.impact_statements.filter(Boolean) : [];
+  const isVerified = Boolean(campaign?.is_verified);
+
+  // Find document/image files for thumbnail
+  const docFile = campaign?.campaign_files?.find(f => f.file_type === 'application/pdf');
+  const imgFile = campaign?.campaign_files?.find(f => f.file_type?.startsWith('image/'));
+  const supportingDocUrl = docFile?.file_url || null;
+  const thumbnailUrl = imgFile?.file_url || null;
 
   return (
     <div style={{ maxWidth: 1080, margin: '0 auto', padding: '24px max(16px, env(safe-area-inset-left, 0px)) 64px' }}>
@@ -121,9 +135,14 @@ export default function CampaignDetail() {
               <span style={{ fontSize:'0.72rem', fontWeight:700, padding:'4px 12px', borderRadius:999, background: campaign?.status==='active'?'#F0FDF4':'#F3F4F6', color: campaign?.status==='active'?'#14532D':'#6B7280', border:`1px solid ${campaign?.status==='active'?'#BBF7D0':'#E5E7EB'}` }}>
                 {campaign?.status==='active' ? '● Active' : 'Closed'}
               </span>
+              {isVerified && (
+                <span style={{ background:'#EFF6FF', color:'#1D4ED8', fontSize:'0.72rem', fontWeight:700, padding:'4px 12px', borderRadius:999, border:'1px solid #BFDBFE', display:'inline-flex', alignItems:'center', gap:4 }}>
+                  ✓ Verified
+                </span>
+              )}
               {isUrgent && (
                 <span style={{ background:'#FEF2F2', color:'#B91C1C', fontSize:'0.72rem', fontWeight:700, padding:'4px 12px', borderRadius:999, border:'1px solid #FECACA' }}>
-                  ⏰ Ending soon
+                  🚨 {daysLeftNum === 0 ? 'Ends today' : `${daysLeftNum} day${daysLeftNum === 1 ? '' : 's'} left — Act now!`}
                 </span>
               )}
               <div style={{ marginLeft:'auto' }}>
@@ -137,7 +156,44 @@ export default function CampaignDetail() {
             <p style={{ color:'#92400E', lineHeight:1.75, fontSize:'0.95rem', margin:0, whiteSpace:'pre-line' }}>
               {campaign?.description}
             </p>
+
+            {/* Supporting document thumbnail */}
+            {(thumbnailUrl || supportingDocUrl) && (
+              <div style={{ marginTop:20, borderTop:'1px solid #FEF3C7', paddingTop:16 }}>
+                <p style={{ fontSize:'0.75rem', fontWeight:700, color:'#78350F', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:10 }}>
+                  Supporting Document
+                </p>
+                {thumbnailUrl ? (
+                  <img src={thumbnailUrl} alt="Campaign supporting image"
+                    style={{ maxWidth:'100%', maxHeight:200, borderRadius:10, border:'1.5px solid #FED7AA', objectFit:'cover' }} />
+                ) : (
+                  <a href={supportingDocUrl} target="_blank" rel="noopener noreferrer"
+                    style={{ display:'inline-flex', alignItems:'center', gap:8, background:'#FFF7ED', border:'1.5px solid #FED7AA', borderRadius:10, padding:'10px 16px', color:'#C2410C', fontWeight:700, fontSize:'0.85rem', textDecoration:'none' }}>
+                    📄 View PDF Document
+                  </a>
+                )}
+              </div>
+            )}
           </div>
+
+          {/* Your Impact section */}
+          {impactStatements.length > 0 && (
+            <div style={{ background:'linear-gradient(135deg,#FFF7ED,#FFFBEB)', border:'1.5px solid #FED7AA', borderRadius:18, padding:'24px 28px', boxShadow:'0 2px 12px rgba(194,65,12,0.06)' }}>
+              <h2 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontWeight:900, color:'#7C2D12', fontSize:'1.1rem', margin:'0 0 16px' }}>
+                Your Impact
+              </h2>
+              <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                {impactStatements.map((stmt, i) => (
+                  <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
+                    <span style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#C2410C,#EA580C)', color:'#fff', fontWeight:800, fontSize:'0.8rem', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                      {i + 1}
+                    </span>
+                    <p style={{ color:'#78350F', fontSize:'0.9rem', lineHeight:1.65, margin:0, fontWeight:500 }}>{stmt}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Progress card */}
           <div style={{ background:'linear-gradient(135deg,#FFF7ED,#FFF0E8)', border:'1.5px solid #FED7AA', borderRadius:18, padding:'24px 28px' }}>
