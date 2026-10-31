@@ -125,6 +125,7 @@ const createCampaign = async (req, res) => {
       goal_amount,
       category,
       deadline,
+      impact_statements,
     } = req.body;
 
     // Check required fields
@@ -161,6 +162,16 @@ const createCampaign = async (req, res) => {
       });
     }
 
+    // Validate impact_statements: up to 3 non-empty strings
+    let parsedStatements = [];
+    if (impact_statements !== undefined && impact_statements !== null) {
+      const raw = Array.isArray(impact_statements) ? impact_statements : [impact_statements];
+      parsedStatements = raw
+        .map((s) => (typeof s === 'string' ? s.trim() : ''))
+        .filter(Boolean)
+        .slice(0, 3);
+    }
+
     // Save the campaign in Supabase
     const { data, error } = await supabase
       .from('campaigns')
@@ -172,6 +183,7 @@ const createCampaign = async (req, res) => {
         category: category.trim(),
         deadline: deadlineDate.toISOString(),
         status: 'pending_review',
+        impact_statements: parsedStatements,
       })
       .select()
       .single();
@@ -352,6 +364,34 @@ const getCampaignStats = async (req, res) => {
   res.status(501).json({ error: 'Not implemented yet' });
 };
 
+// FR-33: Admin verifies a campaign (sets is_verified = true)
+const verifyCampaign = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from('campaigns')
+      .update({ is_verified: true })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('verifyCampaign error:', error.message);
+      return res.status(500).json({ error: 'Failed to verify campaign' });
+    }
+
+    if (!data) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    return res.status(200).json({ message: 'Campaign verified', campaign: data });
+  } catch (err) {
+    console.error('verifyCampaign unexpected error:', err.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // FR-10: Auto-close expired campaigns (called by cron)
 const closePastDeadlineCampaigns = async () => {
   // TODO (harishreddy2005): Implement
@@ -443,4 +483,5 @@ module.exports = {
   getCampaignStats,
   getPublicStats,
   closePastDeadlineCampaigns,
+  verifyCampaign,
 };
