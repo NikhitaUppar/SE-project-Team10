@@ -1,15 +1,16 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import ShareButton from './ShareButton';
 import { getRemainingDaysText } from '../../utils/dateUtils';
 
 const CATEGORY_COLORS = {
-  Healthcare: { bg: '#FFF0F0', text: '#991B1B', dot: '#EF4444' },
-  Education:  { bg: '#FFF7ED', text: '#9A3412', dot: '#F97316' },
-  Relief:     { bg: '#FFFBEB', text: '#92400E', dot: '#F59E0B' },
-  Animals:    { bg: '#F0FDF4', text: '#14532D', dot: '#22C55E' },
-  Community:  { bg: '#EFF6FF', text: '#1E3A8A', dot: '#3B82F6' },
-  Environment:{ bg: '#F0FDF4', text: '#064E3B', dot: '#10B981' },
+  Education:   { bg: '#FFF7ED', text: '#9A3412', dot: '#F97316' },
+  Medical:     { bg: '#FFF0F0', text: '#991B1B', dot: '#EF4444' },
+  Food:        { bg: '#FFFBEB', text: '#92400E', dot: '#F59E0B' },
+  Environment: { bg: '#F0FDF4', text: '#064E3B', dot: '#10B981' },
+  Animals:     { bg: '#F0FDF4', text: '#14532D', dot: '#22C55E' },
+  Shelter:     { bg: '#EFF6FF', text: '#1E3A8A', dot: '#3B82F6' },
+  Emergency:   { bg: '#FEF2F2', text: '#991B1B', dot: '#DC2626' },
 };
 
 export default function CampaignCard({ campaign }) {
@@ -54,12 +55,16 @@ export default function CampaignCard({ campaign }) {
         ) : (
           <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <span style={{ fontSize: '2.5rem', opacity: 0.6 }}>
-              {campaign?.category === 'Healthcare' ? '🏥' :
-               campaign?.category === 'Education' ? '📚' :
-               campaign?.category === 'Animals' ? '🐾' :
-               campaign?.category === 'Environment' ? '🌱' :
-               campaign?.category === 'Relief' ? '🤝' : '🧡'}
-            </span>
+  {({
+    Medical: '🏥',
+    Education: '📚',
+    Food: '🍲',
+    Environment: '🌱',
+    Animals: '🐾',
+    Shelter: '🏠',
+    Emergency: '🚨'
+  })[campaign?.category] || '🧡'}
+</span>
             <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               {campaign?.category || 'Cause'}
             </span>
