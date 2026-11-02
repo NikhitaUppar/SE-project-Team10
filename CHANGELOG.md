@@ -1,5 +1,20 @@
 # Project change record
 
+## 2026-11-02: Issue #36 campaign donor leaderboard
+
+- Updated main at `d9c48d1` and created `feature/36-donor-leaderboard`.
+  Unmerged issue #12/#13 branches remain separate and preserved.
+- Added a public top/recent-donors API using completed records, privacy masking,
+  exact paise totals, deterministic ties, provider deduplication, and keyset paging.
+- Replaced the old supporters block with Top Donors and Recent Donations, INR,
+  relative timestamps, responsive layout, loading/error/retry, and refresh after
+  existing payment verification. No payment/authentication flow changes.
+- 13 PostgreSQL/formatting scenarios, frontend build, and isolated Chrome passed.
+  Full backend: 234 passed / 12 failed; all failures are in unchanged main login
+  tests. The feature guide records those inherited failures.
+- No migration, new dependency, private environment change, shared write, real
+  payment, or email. User approval is required before push/PR creation.
+
 ## Replacement pull requests created on 2026-10-24
 
 - Issue #5: [PR #30](https://github.com/NikhitaUppar/SE-project-Team10/pull/30),
