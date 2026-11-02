@@ -148,10 +148,10 @@ describe('User Controller - getMyDonations (FR-19)', () => {
 });
 
 // ==========================================
-// Tests for getMyCampaigns (Issue #35)
+// Tests for getMyCampaigns (Issue #35 / FR-20)
 // ==========================================
 
-describe('User Controller - getMyCampaigns (Issue #35)', () => {
+describe('User Controller - getMyCampaigns (Issue #35 / FR-20)', () => {
   let req;
   let res;
   let chain;
@@ -199,16 +199,26 @@ describe('User Controller - getMyCampaigns (Issue #35)', () => {
       {
         id: 'camp-1',
         title: 'School Supplies',
+        goal_amount: 10000,
+        raised_amount: 2500,
         status: 'active',
+        category: 'Education',
+        deadline: '2026-12-31',
         is_verified: true,
         rejection_reason: null,
+        created_at: '2026-10-26T12:00:00Z',
       },
       {
         id: 'camp-2',
         title: 'Medical Help',
+        goal_amount: 20000,
+        raised_amount: 0,
         status: 'rejected',
+        category: 'Medical',
+        deadline: '2026-12-31',
         is_verified: false,
         rejection_reason: 'Please upload a valid document',
+        created_at: '2026-10-25T08:00:00Z',
       },
     ];
 
@@ -222,7 +232,7 @@ describe('User Controller - getMyCampaigns (Issue #35)', () => {
     expect(supabase.from).toHaveBeenCalledWith('campaigns');
 
     expect(chain.select).toHaveBeenCalledWith(
-      'id, title, status, is_verified, rejection_reason, created_at'
+      'id, title, goal_amount, raised_amount, status, category, deadline, is_verified, rejection_reason, created_at'
     );
 
     expect(chain.eq).toHaveBeenCalledWith('owner_id', 'owner-123');
