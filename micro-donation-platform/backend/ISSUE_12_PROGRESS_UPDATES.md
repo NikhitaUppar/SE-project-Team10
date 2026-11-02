@@ -203,3 +203,19 @@ posting, reload persistence, validation/error retries, escaped HTML, reader role
 mobile layout, closed/missing campaigns, and browsing. No shared database records, credentials, or
 private environment files were changed. This follow-up is being verified locally;
 the PR has not been merged or renamed.
+
+### Latest-main verification before publishing
+
+Main advanced again to `d9c48d1` (admin panel and checkout changes). Integrated it
+without conflicts and reran verification. Frontend build and all progress-update
+browser scenarios passed, including the newer detail-page features. The complete
+backend run finished with **218 passed / 12 failed across 18 suites**. All failures
+are in `tests/login.test.js`: main's hard-coded authentication shortcut for
+`11111111-1111-1111-1111-111111111111` bypasses the database identity/session checks
+and changes the expected display name. Both that middleware and the login tests
+are identical to `origin/main`; this PR does not change them. The progress-update
+PostgreSQL/JWT integration suite passed. The earlier 230/230 result applies to
+main at `e1d4ab4`, before the newer authentication shortcut was integrated.
+
+Keep this authentication regression visible to reviewers; this progress-update
+PR does not weaken tests or rewrite the separate authentication/payment work.
