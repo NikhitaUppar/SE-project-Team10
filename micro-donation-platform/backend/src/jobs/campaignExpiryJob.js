@@ -1,5 +1,6 @@
 const nodeCron = require('node-cron');
 const { closeExpiredCampaigns } = require('../services/campaignLifecycle');
+const registeredJobs = new WeakMap();
 
 function startCampaignExpiryJob({
   cron = nodeCron,
@@ -9,6 +10,7 @@ function startCampaignExpiryJob({
 } = {}) {
   // Reject invalid deployment settings instead of silently using host time.
   new Intl.DateTimeFormat('en', { timeZone: timezone });
+  if (registeredJobs.has(cron)) return registeredJobs.get(cron);
   let running = false;
   const run = async () => {
     if (running) return { skipped: true };
@@ -28,7 +30,9 @@ function startCampaignExpiryJob({
   const task = cron.schedule('0 0 * * *', run, { timezone });
   // Catch up after downtime; normal scheduled execution is daily at midnight.
   const ready = run();
-  return { ready, run, stop: () => task.stop() };
+  const job = { ready, run, stop: () => { task.stop(); registeredJobs.delete(cron); } };
+  registeredJobs.set(cron, job);
+  return job;
 }
 
 module.exports = { startCampaignExpiryJob };

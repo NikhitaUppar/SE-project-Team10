@@ -25,13 +25,13 @@ async function run() {
     });
     await page.goto(`http://localhost:5173/campaigns/${fixture.ids.expired}`);
     await page.getByRole('heading', { name: 'Donations unavailable' }).waitFor();
-    assert.equal(await page.getByRole('button', { name: /with Razorpay/ }).count(), 0);
+    assert.equal(await page.locator('form button[type="submit"]').count(), 0);
     await page.getByText('closed', { exact: true }).waitFor();
     assert.equal(orderRequests, 0);
     console.log('PASS: expired detail shows closed and has no donation form before the daily job');
 
     await page.goto(`http://localhost:5173/campaigns/${fixture.ids.future}`);
-    const donate = page.getByRole('button', { name: /with Razorpay/ });
+    const donate = page.locator('form button[type="submit"]');
     await donate.waitFor(); assert.equal(await donate.isEnabled(), true);
     // The page is stale: simulate a deadline passing without a frontend timer.
     await fixture.db.query('UPDATE public.campaigns SET deadline=$1 WHERE id=$2', [new Date(Date.now() - 1000).toISOString(), fixture.ids.future]);

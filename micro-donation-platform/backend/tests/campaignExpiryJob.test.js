@@ -26,6 +26,23 @@ test('the installed cron matcher identifies midnight in the configured timezone'
   expect(matcher.match(new Date('2030-01-02T00:00:00Z'))).toBe(false);
 });
 
+test('repeated startup does not register duplicate jobs; stop allows a restart', async () => {
+  const cron = { schedule: jest.fn(() => ({ stop: jest.fn() })) };
+  const close = jest.fn().mockResolvedValue({ closedCount: 0 });
+  const logger = { info() {}, error() {} };
+  const first = startCampaignExpiryJob({ cron, close, logger });
+  const second = startCampaignExpiryJob({ cron, close, logger });
+  expect(second).toBe(first);
+  await first.ready;
+  expect(cron.schedule).toHaveBeenCalledTimes(1);
+  expect(close).toHaveBeenCalledTimes(1);
+  first.stop();
+  const restarted = startCampaignExpiryJob({ cron, close, logger });
+  await restarted.ready;
+  expect(cron.schedule).toHaveBeenCalledTimes(2);
+  restarted.stop();
+});
+
 test('supports explicit timezone settings and rejects invalid deployment values', async () => {
   const job = setup(undefined, 'UTC'); await job.ready;
   expect(job.cron.schedule).toHaveBeenCalledWith('0 0 * * *', job.run, { timezone: 'UTC' });

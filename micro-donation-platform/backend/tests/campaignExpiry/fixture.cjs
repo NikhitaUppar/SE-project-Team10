@@ -10,10 +10,14 @@ async function createFixture() {
   await db.exec('CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;');
   await db.exec(fs.readFileSync(path.join(__dirname, '../../src/config/schema.sql'), 'utf8'));
   await db.exec(fs.readFileSync(path.join(__dirname, '../../src/config/migrations/006_password_reset.sql'), 'utf8'));
+  await db.exec(fs.readFileSync(path.join(__dirname, '../../src/config/migrations/013_campaign_expiry_payments.sql'), 'utf8'));
+  // Existing main's creation controller writes these optional campaign fields.
+  await db.exec('ALTER TABLE public.campaigns ADD COLUMN impact_statements text[], ADD COLUMN is_verified boolean DEFAULT false');
   await db.exec(`
     GRANT USAGE ON SCHEMA public TO service_role;
     GRANT SELECT ON public.users TO service_role;
     GRANT SELECT, UPDATE, INSERT ON public.campaigns TO service_role;
+    GRANT SELECT, UPDATE, INSERT ON public.donations TO service_role;
     CREATE TABLE public.test_expiry_audit (campaign_id uuid, previous_status text, next_status text);
     GRANT INSERT ON public.test_expiry_audit TO service_role;
     CREATE FUNCTION public.test_log_expiry() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -65,8 +69,46 @@ async function createFixture() {
       return respond(req, res.status(201), rows);
     } catch { return res.status(500).json({ code: 'TEST_ERROR' }); }
   });
+  rest.post('/rest/v1/rpc/settle_campaign_payment', async (req, res) => {
+    try {
+      const { p_order_id, p_payment_id, p_donor_id } = req.body;
+      const { rows } = await query('SELECT public.settle_campaign_payment($1,$2,$3) AS result', [p_order_id, p_payment_id, p_donor_id]);
+      return res.json(rows[0].result);
+    } catch { return res.status(500).json({ code: 'TEST_ERROR' }); }
+  });
+  rest.get('/rest/v1/donations', async (req, res) => {
+    try {
+      const joined = req.query.razorpay_order_id;
+      const { rows } = joined
+        ? await query(`SELECT d.*, row_to_json(c) AS campaigns, row_to_json(u) AS users FROM public.donations d
+          JOIN public.campaigns c ON c.id=d.campaign_id JOIN public.users u ON u.id=d.donor_id
+          WHERE d.razorpay_order_id=$1`, [joined.slice(3)])
+        : await query(`SELECT d.*, json_build_object('display_name',u.display_name) AS users FROM public.donations d
+          LEFT JOIN public.users u ON u.id=d.donor_id WHERE d.campaign_id=$1 AND d.status=$2 ORDER BY d.created_at DESC`,
+        [req.query.campaign_id.slice(3), req.query.status.slice(3)]);
+      return respond(req, res, rows);
+    } catch { return res.status(500).json({ code: 'TEST_ERROR' }); }
+  });
+  rest.post('/rest/v1/donations', async (req, res) => {
+    try {
+      const d = Array.isArray(req.body) ? req.body[0] : req.body;
+      const { rows } = await query('INSERT INTO public.donations (campaign_id,donor_id,amount,is_anonymous,status,razorpay_order_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+        [d.campaign_id, d.donor_id, d.amount, d.is_anonymous, d.status, d.razorpay_order_id]);
+      return respond(req, res.status(201), rows);
+    } catch { return res.status(500).json({ code: 'TEST_ERROR' }); }
+  });
+  rest.patch('/rest/v1/donations', async (req, res) => {
+    try {
+      if (req.body.status !== 'failed' || req.query.status !== 'eq.pending') throw new Error('Unsafe test update');
+      await query("UPDATE public.donations SET status='failed',razorpay_payment_id=$1 WHERE razorpay_order_id=$2 AND status='pending'", [req.body.razorpay_payment_id, req.query.razorpay_order_id.slice(3)]);
+      return res.json([]);
+    } catch { return res.status(500).json({ code: 'TEST_ERROR' }); }
+  });
   const server = await new Promise(resolve => { const s = rest.listen(0, '127.0.0.1', () => resolve(s)); });
-  Object.assign(process.env, { SUPABASE_URL: `http://127.0.0.1:${server.address().port}`, SUPABASE_SERVICE_KEY: 'local-expiry-test-key', JWT_SECRET: 'local-expiry-test-secret', NODE_ENV: 'test' });
+  Object.assign(process.env, { SUPABASE_URL: `http://127.0.0.1:${server.address().port}`, SUPABASE_SERVICE_KEY: 'local-expiry-test-key', JWT_SECRET: 'local-expiry-test-secret', NODE_ENV: 'test',
+    RAZORPAY_KEY_ID: 'rzp_test_placeholder', RAZORPAY_KEY_SECRET: 'expiry-test-secret', RAZORPAY_WEBHOOK_SECRET: 'expiry-test-webhook' });
+  const receipts = [];
+  require('../../src/controllers/emailController').sendReceiptEmail = async (...args) => { receipts.push(args); return { success: true }; };
   const database = require('../../src/config/supabase');
   const lifecycle = require('../../src/services/campaignLifecycle');
   const app = express(); app.use(express.json());
@@ -78,6 +120,9 @@ async function createFixture() {
   for (const name of ['expired', 'future', 'boundary', 'closed', 'pending', 'rejected', 'offsetExpired']) ids[name] = crypto.randomUUID();
   let now;
   const seed = async () => {
+    process.env.NODE_ENV = 'test';
+    receipts.length = 0;
+    require('../../src/controllers/donationController').processedOrders.clear();
     await db.exec('TRUNCATE public.users CASCADE; TRUNCATE public.test_expiry_audit;');
     now = new Date();
     for (const [name, role] of [['owner', 'campaign_owner'], ['donor', 'donor']]) {
@@ -93,7 +138,7 @@ async function createFixture() {
     await db.query('INSERT INTO public.campaign_updates (campaign_id,content) VALUES ($1,$2)', [ids.expired, 'Existing progress must remain']);
   };
   const token = name => jwt.sign({ id: ids[name], auth_version: 0 }, process.env.JWT_SECRET, { expiresIn: '1h' });
-  return { db, database, lifecycle, app, ids, seed, token, get now() { return now; }, close: async () => { await new Promise(resolve => server.close(resolve)); await db.close(); } };
+  return { db, database, lifecycle, app, ids, seed, token, receipts, get now() { return now; }, close: async () => { await new Promise(resolve => server.close(resolve)); await db.close(); } };
 }
 
 module.exports = { createFixture };

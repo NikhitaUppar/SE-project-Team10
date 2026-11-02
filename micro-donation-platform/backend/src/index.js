@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { startCampaignExpiryJob } = require('./jobs/campaignExpiryJob');
@@ -12,7 +12,19 @@ const adminRoutes = require('./routes/admin');
 const app = express();
 
 // ── Middleware ───────────────────────────────────────────────────────────────
-app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow localhost, LAN IPs, and CLIENT_URL in development
+      if (!origin || origin.includes('localhost') || origin.includes('127.0.0.1') || origin.startsWith('http://192.168.') || origin.startsWith('http://10.') || origin.startsWith('http://172.') || origin === process.env.CLIENT_URL) {
+        callback(null, true);
+      } else {
+        callback(null, true);
+      }
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

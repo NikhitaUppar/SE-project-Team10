@@ -1,174 +1,199 @@
 # [CAMPAIGN] Auto-close campaigns past deadline (FR-10)
 
-Issue: <https://github.com/NikhitaUppar/SE-project-Team10/issues/13>
+Issue: https://github.com/NikhitaUppar/SE-project-Team10/issues/13
 
-Branch: `feature/13-auto-close-campaigns`, based on updated `main` at `509d358`.
-The working tree was clean before fetching, switching to main, pulling with
-`--ff-only`, and creating this branch. Issue #12's branch/PR was preserved:
-it is unmerged and is not a dependency of this implementation.
+Branch: `feature/13-auto-close-campaigns`. The existing `c03728f` implementation
+was preserved and integrated with main at `d9c48d1` on 2026-11-02. Main was
+updated with `git pull --ff-only origin main` after checking a clean working tree
+and fetching/pruning. No destructive reset, force push, or main commit was used.
+Issue #12 / PR #39 is still unmerged and is not a dependency of this branch.
+Its branch and progress-update implementation are preserved separately.
 
-## Actual acceptance criteria
+## Findings before integration
 
-| Criterion | Implementation |
+Main registers `node-cron` at `0 0 * * *`, but its close callback is a TODO and
+has no explicit timezone. Its donation check bypasses the database in test mode,
+ignores lookup failures, and checks status without deadline. Its confirmation and
+webhook paths separately read/write raised totals, including on closed campaigns.
+The existing issue #13 branch already implemented the lifecycle service, scheduler,
+and order restriction. Those were reused instead of creating a second scheduler.
+Newer checkout, admin, campaign statistics, sharing, impact, and design changes from
+main were retained. Authentication and provider signature rules remain unchanged.
+
+## Acceptance criteria and deadline rules
+
+| Requirement | Implementation |
 | --- | --- |
-| Cron job runs daily at midnight | Existing `node-cron` schedules `0 0 * * *` in `Asia/Kolkata` by default; application startup wires the job in development/production. |
-| Expired campaigns set to `closed` | One conditional SQL update changes only `active` campaigns with `deadline < cutoff` to the existing `closed` status. |
-| Closed campaigns no longer accept donations | Every new donation order checks current status and deadline before creating a payment order. Database lookup failures also block the operation. The UI uses the backend's `accepting_donations` flag. |
+| Daily midnight check | Existing node-cron, `0 0 * * *`, explicit `Asia/Kolkata` default. |
+| Expired active rows become closed | One conditional status-only UPDATE where status=active and deadline<cutoff. |
+| Closed campaigns cannot accept new donations | Mandatory database check of status/deadline before new orders; unavailable/database-failure requests are blocked. |
+| Closed campaigns receive no raised-total credit | Payment reconciliation locks donation/campaign rows and checks eligibility before incrementing totals. |
 
-## Deadline and status rules
+`CAMPAIGN_CRON_TIMEZONE` accepts an optional valid IANA timezone. Comparisons use
+absolute instants and UTC cutoffs; equivalent Z and +05:30 deadlines behave alike.
+At exactly the deadline, a campaign is still eligible. One millisecond later it
+is expired. Invalid/missing deadlines cannot accept donations.
 
-The existing schema uses a `TIMESTAMPTZ` deadline and these campaign statuses:
-`pending_review`, `active`, `rejected`, and `closed`. These existing values are
-centralized in `campaignLifecycle.js`; no new status or schema migration is added.
-There is no `cancelled` status in the current schema. The expiry update is restricted
-to `active`, so all non-active statuses remain unchanged, including any future
-terminal status the project may add.
+Only active campaigns are auto-closed. Pending review, rejected, already closed,
+and other future terminal states are preserved. Campaign details, files, updates,
+financial history, and ownership are not deleted. Multiple expired campaigns are
+closed in one atomic operation; repeated/concurrent closure is idempotent.
 
-The boundary is strict: a deadline **earlier than** the check time has passed.
-At exactly the same instant, the campaign is not expired yet. The scheduler
-and API both use this rule. JavaScript compares absolute instants; the database
-receives a UTC ISO cutoff and compares timezone-aware timestamps. Equivalent
-`Z` and `+05:30` dates refer to the same deadline.
+The application registers the scheduler outside NODE_ENV=test. Registration is
+reused if startup is called again for the same scheduler. A startup catch-up
+handles downtime. Runs do not overlap; database errors are logged without private
+details and the following scheduled invocation can retry. No extra worker or
+project dependency was added.
 
-The write changes only campaign `status`. Campaign stories, ownership, goals,
-raised totals, donations, files, progress updates, and their relationships stay
-intact. Repeated/concurrent runs do not repeat state changes: already-closed
-rows no longer match the update predicate. Each process also avoids overlapping
-job executions. Database errors are contained, logged without private details,
-and retried on the next daily invocation.
+## New orders, capture, and reconciliation
 
-## Automatic execution and deployment
+Every create-order call checks the database, including tests/demo payment mode.
+Missing campaigns return 404, unavailable campaigns 409, and failed availability
+lookups 503. Expired active campaigns are blocked before the next midnight job.
+A pending donation must be stored before checkout is offered in configured mode.
 
-The existing backend entrypoint starts the job outside `NODE_ENV=test`.
-It immediately performs a catch-up check after startup, then runs daily at
-midnight. This catches campaigns that expired while the process was stopped.
+Direct verification and captured/paid webhooks share `settle_campaign_payment`.
+The transaction locks the donation and campaign, validates the donor for direct
+verification, increments the campaign total only while active and unexpired, and
+records the captured payment. The order has a unique non-null Razorpay order ID.
+Duplicate/reordered callbacks and application restarts cannot double-credit it.
+A different payment ID for an already-completed order is rejected. SQL errors
+return a retryable 503 and never fall back to non-atomic accounting.
 
-`CAMPAIGN_CRON_TIMEZONE` is optional. Its default is `Asia/Kolkata`, matching the
-India-focused project. Set it to another valid IANA timezone, such as `UTC`,
-only if the deployment needs a different definition of midnight. An invalid
-timezone is rejected instead of silently using the host's local timezone.
-The environment example documents this setting; private `.env` files are unchanged.
+If an existing order is captured after closure/expiry, the financial record still
+becomes completed with its provider payment ID, but `campaign_credited=false`.
+The campaign total does not increase. The direct API returns
+`reconciliation_required=true`; the UI explains that the organiser must reconcile
+it. This is not a refund: no automatic refund is invented or claimed. The existing
+captured-payment/receipt workflow remains; only first completion dispatches the
+receipt. Owner totals/donor count/timeline exclude explicitly uncredited captures.
+Historical donation rows retain `campaign_credited=NULL` and their previous meaning.
+A late payment.failed event can only update pending rows, never completed ones.
 
-No database migration, new dependency, external cron configuration, or manual
-admin closure is required for the existing long-running Node deployment.
-The backend needs its existing Supabase service key and permission to update
-campaigns. Run it continuously on the VM/container, with restart-on-failure
-configured by the deployment process. Sleeping or request-only serverless
-hosting cannot guarantee an in-process midnight job; it would need a durable
-external scheduler. Multiple running replicas are safe for the conditional,
-idempotent database update, though they may each log a check.
+## Frontend
 
-**Starting `npm.cmd run dev` or `npm.cmd start` with the real backend configuration
-will now perform the intended expiry catch-up against that configured database.**
-During implementation, the live shared backend was stopped; all closure/write
-verification used isolated test databases. No shared campaigns were closed as
-part of automated testing.
+API responses include `accepting_donations` and present expired active campaigns
+as closed without writing during GET. Active browsing filters expired rows before
+count/pagination. Cards show View Campaign when donations are unavailable. Detail
+pages preserve the existing design, sharing/countdown, impact text, documents,
+supporter history, and checkout modal; unavailable forms are hidden with an
+explanation. A stale page's donation request is still blocked by the backend.
 
-## API, UI, and existing-feature integration
+Failed/missing detail requests show a real error instead of a fabricated active
+campaign. The payment callback refreshes authoritative totals rather than adding
+an optimistic amount to a possibly closed campaign. Verification failures are
+shown without claiming success. This branch does not reimplement issue #12.
 
-There can be time between an individual deadline and the next midnight job.
-To avoid accepting donations during that gap:
+## Required migration and deployment
 
-- Active browsing filters out expired rows in Supabase before pagination/counts.
-- Campaign detail/read responses present an expired active campaign as closed
-  and include `accepting_donations: false`. GET requests do not write status.
-- Donation creation checks the same lifecycle policy unconditionally, including
-  in demo/test mode. It returns 409 for unavailable campaigns, 404 for a missing
-  campaign, or 503 for a failed availability lookup, before payment-order creation.
-- The detail page hides the donation form when the API disallows donations.
-  A stale page is still blocked by the backend if its deadline passed after loading.
-- Campaign cards use the API flag for their action label; unavailable campaigns
-  link to their history as **View Campaign** instead of **Donate Now**.
+**Generated, tested locally, NOT applied to shared Supabase:**
+`src/config/migrations/013_campaign_expiry_payments.sql`.
 
-Existing campaign creation still creates `pending_review` rows. Expiry does not
-approve, reject, or close pending campaigns. Listing/detail statistics and records
-are preserved. Issue #12 is not implemented or rewritten here; after it merges,
-its existing status check prevents owner progress posts on persisted closed
-campaigns and its UI receives the effective closed status from detail responses.
+Before deploying this branch, a project administrator must review and execute
+that file in Supabase SQL Editor using the existing schema. It adds a nullable
+`donations.campaign_credited` flag, a unique partial order-ID index, and the
+service-role-only settlement function. It does not delete/relabel historical rows.
+If duplicate historical order IDs exist, index creation fails and the transaction
+rolls back; investigate those records rather than deleting them. A read-only
+preflight can identify them:
 
-Payment confirmation and webhooks for already-issued orders are unchanged.
-They must still record payments the provider has actually captured; expiry must
-not discard financial records or invent refunds. FR-10 blocks **new order creation**.
+```sql
+SELECT razorpay_order_id, COUNT(*)
+FROM public.donations
+WHERE razorpay_order_id IS NOT NULL
+GROUP BY razorpay_order_id HAVING COUNT(*) > 1;
+```
 
-## Changed files
+The isolated PostgreSQL tests apply the real migration and confirm that reapplying
+it preserves historical data and ordinary authenticated roles cannot execute it.
+For administrator reconciliation, query completed donations with
+`campaign_credited IS FALSE`. Do not rerun schema.sql on an existing database.
 
-Paths below are relative to `micro-donation-platform`, except the two root docs.
+Existing Supabase campaign/donation fields were confirmed with zero-row read-only
+queries (HTTP 200). No remote migration, shared writes, real payment, or email was
+used during this task. Both private .env files are preserved and ignored.
+
+The in-process schedule needs an always-running backend. Sleeping/serverless
+hosting needs a durable external scheduler. Normal startup with real configuration
+performs catch-up against that database; no live startup was used for expiry tests.
+Run the migration before starting the new backend/payment handlers. If it is
+missing, payment reconciliation fails safely rather than bypassing the rule.
+
+## Files added or updated relative to main
+
+Paths are relative to micro-donation-platform except the two root documents.
 
 | File | Purpose |
 | --- | --- |
-| `backend/src/services/campaignLifecycle.js` | Shared statuses, expiry/availability policy, effective presentation, atomic close operation. |
-| `backend/src/jobs/campaignExpiryJob.js` | Midnight scheduling, explicit timezone, startup catch-up, overlap guard, safe failure/retry. |
-| `backend/src/index.js` | Connects the real job to app startup, replacing the TODO callback. |
-| `backend/src/controllers/campaignController.js` | Filters expired active listings, presents effective detail status, delegates the legacy close helper. |
-| `backend/src/controllers/donationController.js` | Mandatory fail-closed availability check before new payment orders. |
-| `backend/.env.example` | Documents the optional cron timezone. |
-| `frontend/src/components/campaign/CampaignCard.jsx` | Uses the availability flag for status styling and action labels. |
-| `frontend/src/pages/CampaignDetail.jsx` | Uses backend permission to block the donation form and submission. |
-| `backend/tests/campaignController.test.js` | Adds the deadline-filter operation to existing browsing mocks. |
-| `backend/tests/razorpay.test.js` | Supplies an actual active/future campaign fixture now that availability is always checked. |
-| `backend/tests/campaignLifecycle.test.js` | Date boundary, offsets, status preservation, atomic predicate, API availability, and fail-closed tests. |
-| `backend/tests/campaignExpiryJob.test.js` | Midnight matcher/timezone, startup catch-up, configurable timezone, overlap, failure/retry. |
-| `backend/tests/campaignExpiryStartup.test.js` | Verifies the app wires the scheduler in development/production and disables it in tests without opening real listeners. |
-| `backend/tests/campaignExpiry.integration.test.js` | Runs the PostgreSQL/real-route scenarios through Jest. |
-| `backend/tests/campaignExpiry/fixture.cjs` | Isolated PostgreSQL, real JWT/Supabase-client test adapter, and production routes. |
-| `backend/tests/campaignExpiry/flow.cjs` | Actual SQL closure, idempotency/audit, preservation, API restrictions, and regressions. |
-| `backend/tests/campaignExpiry/browser.cjs` | Optional Chrome checks for closed/future campaigns and stale-page donation rejection. |
-| `backend/ISSUE_13_AUTO_CLOSE.md` | Rules, file review, deployment, validation evidence, and prepared PR description. |
-| Root `README.md` | Links this feature guide. |
-| Root `CHANGELOG.md` | Records implementation and validation. |
+| backend/src/services/campaignLifecycle.js | Status/deadline policy, effective presentation, atomic expiry update. |
+| backend/src/jobs/campaignExpiryJob.js | Explicit midnight timezone, catch-up, duplicate/overlap guard, retry handling. |
+| backend/src/services/paymentSettlement.js | Shared service-role RPC for verify and webhook accounting. |
+| backend/src/config/migrations/013_campaign_expiry_payments.sql | Atomic settlement, uncredited capture marker, unique order IDs. |
+| backend/src/index.js | Wires the existing scheduler implementation into startup. |
+| backend/src/controllers/campaignController.js | Expiry-aware list/detail and consistent owner fundraising totals. |
+| backend/src/controllers/donationController.js | Mandatory order eligibility; atomic capture reconciliation and retry responses. |
+| backend/.env.example | Optional cron timezone documentation. |
+| frontend/src/components/campaign/CampaignCard.jsx | Unavailable campaign action label. |
+| frontend/src/pages/CampaignDetail.jsx | Closed-state donation UI and authoritative payment totals. |
+| backend/tests/campaignLifecycle.test.js | Deadline/status, safe closure, mandatory order checks, API policy. |
+| backend/tests/campaignExpiryJob.test.js | Midnight, timezone, startup catch-up, duplicates, overlap, retry. |
+| backend/tests/campaignExpiryStartup.test.js | Development/production startup wiring, no scheduler in tests. |
+| backend/tests/campaignExpiry.integration.test.js | Runs isolated PostgreSQL scenarios through Jest. |
+| backend/tests/campaignExpiry/fixture.cjs | Isolated PostgreSQL and real-route/Supabase adapter; no .env. |
+| backend/tests/campaignExpiry/flow.cjs | SQL expiry/preservation, HTTP restrictions, signed payment callbacks, retries and migration. |
+| backend/tests/campaignExpiry/browser.cjs | Closed/future UI, stale-page order rejection, reload and browsing. |
+| backend/tests/campaignController.test.js | Updated browse mocks for deadline filtering. |
+| backend/tests/razorpay.test.js | Actual future-active fixture for mandatory eligibility checks. |
+| backend/tests/authDonation.integration.test.js | Campaign projection/deadline in existing auth/donation fixture. |
+| backend/tests/campaignStats.test.js | Excludes uncredited late captures from owner totals and timeline. |
+| backend/ISSUE_13_AUTO_CLOSE.md | Review, deployment/migration, validation, and PR draft. |
+| Root README.md | Link to this feature guide. |
+| Root CHANGELOG.md | Record of issue #13 integration and verification. |
 
-## Verification completed on 2026-10-26
+## Actual validation on 2026-11-02
 
-- `npm.cmd test -- --runInBand` in backend: **17 suites / 210 Jest tests passed**.
-  The new integration wrapper runs **10 additional child PostgreSQL scenarios**.
-- Direct `node --test tests/campaignExpiry/flow.cjs`: **10/10 passed**. Verifies
-  only eligible rows close, exact boundary, offset timestamps, future/terminal
-  preservation, concurrent/repeated calls, an audit trigger with no duplicate
-  transitions, related-row preservation, startup/scheduled callbacks, failure
-  recovery, closed-order rejection, browsing counts, and creation review status.
-- Scheduler unit checks exercise the installed cron's timezone-aware midnight
-  matcher, and entrypoint tests verify real startup wiring.
-- `npm.cmd run build` in frontend: passed.
-- Optional headless Chrome: expired detail hides donation controls before the
-  daily persistence, future detail allows donation controls, backend rejects an
-  expired request from a stale page, persisted closure survives reload, and
-  browsing keeps future campaigns while excluding expired ones: all passed.
-- Existing auth, receipt, payment verification, campaign creation/upload, and
-  browsing checks passed. No real payments or emails were sent.
-- No lint script/ESLint configuration exists; no lint run is claimed.
-  Patch whitespace is checked with `git diff --check`.
+- Direct PostgreSQL suite: **21/21 passed**. Exercises the real migration, expiry
+  SQL, UTC/offset/exact boundaries, status preservation, multiple/concurrent runs,
+  audit trail, real routes/JWTs, signed verify/webhooks, no late credit, retries,
+  persisted idempotency after cache reset, failed webhook ordering, and permissions.
+- Frontend production build passed.
+- Isolated Chrome passed: closed state before persistence, hidden donation form,
+  initially eligible future campaign, stale-page backend rejection, persisted
+  closure after reload, and browsing filtering. Selectors were updated for the
+  current checkout button instead of the previous Razorpay button label.
+- Full backend run: **247 passed / 12 failed**, **20 suites passed / 1 failed**.
+  All 12 failures are the inherited login failures documented below; the expiry,
+  payment, campaign, and other existing suites passed. This includes the Jest
+  wrapper for the 21 child PostgreSQL scenarios.
+- No configured lint script/ESLint configuration exists. PR diff whitespace check
+  is used instead. No private keys or environment files belong in the PR diff.
 
-Tests do not load the real `.env`; fixtures create temporary local PostgreSQL
-and test JWTs, and payment creation uses the existing test simulation. No new
-project dependencies or private credentials are required by the tests.
+Main contains an authentication shortcut for UUID
+`11111111-1111-1111-1111-111111111111`. An untouched archived copy of main at
+`d9c48d1` independently reproduced **12 failed / 28 passed login tests**. The
+shortcut bypasses database/session checks for that UUID. This issue #13 branch
+does not alter auth middleware or login tests, and does not claim the full suite
+is green. That regression needs separate attention before merge. Existing
+provider demo-signature/test-mode behavior is also preserved, not redesigned.
 
-For the optional browser runner, start only the frontend on localhost:5173.
-Set `PLAYWRIGHT_MODULE_PATH` to a separate Playwright Core installation, and
-`CHROME_PATH` if Chrome is not installed at its usual Windows path, then run
-`node tests/campaignExpiry/browser.cjs` from backend. API calls are intercepted
-and sent to the isolated fixture, not the shared backend.
-
-## Prepared PR description
+## Prepared pull request
 
 Title: **[CAMPAIGN] Auto-close campaigns past deadline (FR-10)**
 
 Closes #13
 
-Campaigns whose deadline has passed stop accepting new donations, disappear from
-active browsing, and are persisted as `closed` by the daily midnight job. The
-existing node-cron scheduler now runs in Asia/Kolkata (configurable) with startup
-catch-up. A single conditional status-only update preserves related records and
-is safe to repeat.
+Campaigns past their deadline immediately stop accepting new donation orders and
+are persisted as closed at midnight in Asia/Kolkata, with startup catch-up. Safe
+conditional updates retain existing records. Public API/UI rules match the
+scheduler, including before the nightly run.
 
-Shared lifecycle rules define the strict deadline boundary and keep API/UI
-availability consistent before the midnight run. Donation creation fails closed
-when availability cannot be checked, including in demo/test mode. Existing
-confirmation/webhook bookkeeping is preserved for already-issued payments.
+Verify and webhook callbacks use a row-locked PostgreSQL transaction to prevent
+double credit and preserve captures arriving after closure without increasing the
+closed campaign total. These are marked for administrator reconciliation. The
+required 013 migration is generated/tested and has not been applied remotely.
 
-Changed files and their purposes are listed above. Validation: 210 Jest tests,
-10 PostgreSQL scenarios, cron/startup checks, frontend build, and isolated Chrome
-checks passed. No migration, new dependency, secret, or shared test write is included.
-Deployment needs an always-running backend; restarting it performs catch-up.
+Validation: 21 PostgreSQL scenarios, scheduler/startup/unit checks, frontend build,
+and isolated Chrome checks passed. Full backend: **247 passed / 12 failed**,
+with all failures independently reproduced on main in the login suite. No new dependency or secret is included.
 
-Issue #12 remains an independent unmerged PR. This PR targets `main`, does not
-close the issue manually, and is not authorized for automatic merge.
+Push and PR creation require the user's confirmation. Never merge automatically.

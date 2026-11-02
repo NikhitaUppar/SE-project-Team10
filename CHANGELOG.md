@@ -1,5 +1,20 @@
 # Project change record
 
+## 2026-11-02: Issue #13 integration with current main
+
+- Preserved the existing feature branch and fast-forwarded main to `d9c48d1`.
+- Reused the lifecycle service, explicit midnight scheduler, startup catch-up,
+  and availability checks; resolved conflicts with newer checkout/campaign code.
+- Added duplicate scheduler protection and transactional payment reconciliation
+  so captured payments after closure are recorded without crediting closed totals.
+- Generated migration `013_campaign_expiry_payments.sql`; tested it in isolated
+  PostgreSQL only. It has NOT been applied to shared Supabase.
+- 21 PostgreSQL scenarios, frontend build, and isolated browser checks passed.
+  Full backend: 247 passed / 12 failed; main independently reproduces all 12
+  login-test failures. Auth middleware and login tests are unchanged.
+- Preserved private environments, teammates' changes, and separate issue #12.
+  No shared writes/payments/emails were used for this task. Await push approval.
+
 ## 2026-10-26: Issue #13 auto-close campaigns past deadline (FR-10)
 
 - Created `feature/13-auto-close-campaigns` from fetched, fast-forwarded main

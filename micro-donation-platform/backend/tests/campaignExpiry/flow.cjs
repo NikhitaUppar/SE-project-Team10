@@ -97,3 +97,111 @@ test('campaign creation keeps the existing review workflow; expiry does not appr
   await close();
   assert.equal((await f.db.query('SELECT status FROM public.campaigns WHERE id=$1', [response.body.campaign.id])).rows[0].status, f.lifecycle.CAMPAIGN_STATUS.PENDING_REVIEW);
 });
+
+const createLiveOrder = async (name = 'future') => {
+  // Development executes real persistence against the local adapter; payment and
+  // email providers remain test-only. This never loads the project's .env.
+  process.env.NODE_ENV = 'development';
+  const result = await request(f.app).post('/api/donations/create-order')
+    .set('Authorization', 'Bearer ' + f.token('donor')).send({ campaign_id: f.ids[name], amount: 50 });
+  assert.equal(result.status, 200, JSON.stringify(result.body));
+  return result.body.order_id;
+};
+const verify = (order, payment = 'pay_expiry_test', user = 'donor') => {
+  const signature = require('crypto').createHmac('sha256', process.env.RAZORPAY_KEY_SECRET).update(`${order}|${payment}`).digest('hex');
+  return request(f.app).post('/api/donations/verify').set('Authorization', 'Bearer ' + f.token(user))
+    .send({ razorpay_order_id: order, razorpay_payment_id: payment, razorpay_signature: signature });
+};
+const webhook = (order, event = 'payment.captured') => {
+  const body = { event, payload: { payment: { entity: { id: 'pay_expiry_test', order_id: order } } } };
+  const signature = require('crypto').createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET).update(JSON.stringify(body)).digest('hex');
+  return request(f.app).post('/api/donations/webhook').set('x-razorpay-signature', signature).send(body);
+};
+const campaignTotal = async () => Number((await f.db.query('SELECT raised_amount FROM public.campaigns WHERE id=$1', [f.ids.future])).rows[0].raised_amount);
+
+test('signed verify and webhook callbacks credit an eligible campaign only once, across retries/restarts', async () => {
+  const order = await createLiveOrder();
+  const results = await Promise.all([verify(order), webhook(order)]);
+  for (const result of results) assert.equal(result.status, 200, JSON.stringify(result.body));
+  assert.equal(await campaignTotal(), 60);
+  assert.equal(f.receipts.length, 1);
+  require('../../src/controllers/donationController').processedOrders.clear();
+  assert.equal((await verify(order)).body.already_processed, true);
+  assert.equal((await webhook(order)).body.already_processed, true);
+  assert.equal(await campaignTotal(), 60);
+  assert.equal(f.receipts.length, 1);
+});
+
+for (const status of ['closed', 'active', 'pending_review', 'rejected']) {
+  test(`capture after eligibility ends (${status}) preserves payment without crediting the campaign`, async () => {
+    const order = await createLiveOrder();
+    await f.db.query('UPDATE public.campaigns SET status=$1,deadline=$2 WHERE id=$3', [status, new Date(Date.now() - 1000).toISOString(), f.ids.future]);
+    const result = await verify(order);
+    assert.equal(result.status, 200);
+    assert.equal(result.body.campaign_credited, false);
+    assert.equal(result.body.reconciliation_required, true);
+    assert.equal(await campaignTotal(), 10);
+    const donation = (await f.db.query('SELECT status,razorpay_payment_id,campaign_credited FROM public.donations WHERE razorpay_order_id=$1', [order])).rows[0];
+    assert.deepEqual(donation, { status: 'completed', razorpay_payment_id: 'pay_expiry_test', campaign_credited: false });
+    assert.equal((await webhook(order)).body.already_processed, true);
+    assert.equal(await campaignTotal(), 10);
+  });
+}
+
+test('a webhook arriving first after closure also preserves uncredited funds and prevents later duplicate credit', async () => {
+  const order = await createLiveOrder();
+  await f.db.query("UPDATE public.campaigns SET status='closed' WHERE id=$1", [f.ids.future]);
+  assert.equal((await webhook(order)).status, 200);
+  assert.equal(await campaignTotal(), 10);
+  assert.equal((await verify(order)).body.already_processed, true);
+  assert.equal(await campaignTotal(), 10);
+  const donation = (await f.db.query('SELECT status,campaign_credited FROM public.donations WHERE razorpay_order_id=$1', [order])).rows[0];
+  assert.deepEqual(donation, { status: 'completed', campaign_credited: false });
+});
+
+test('failed settlement is retryable and cannot lose payment state or mark an order processed', async () => {
+  const order = await createLiveOrder();
+  await f.db.exec('REVOKE EXECUTE ON FUNCTION public.settle_campaign_payment(text,text,uuid) FROM service_role');
+  try {
+    assert.equal((await verify(order)).status, 503);
+    assert.equal((await webhook(order)).status, 503);
+  } finally { await f.db.exec('GRANT EXECUTE ON FUNCTION public.settle_campaign_payment(text,text,uuid) TO service_role'); }
+  assert.equal((await f.db.query('SELECT status FROM public.donations WHERE razorpay_order_id=$1', [order])).rows[0].status, 'pending');
+  assert.equal(await campaignTotal(), 10);
+  assert.equal(require('../../src/controllers/donationController').processedOrders.has(order), false);
+  assert.equal((await verify(order)).status, 200);
+  assert.equal(await campaignTotal(), 60);
+});
+
+test('another donor, invalid signature, unknown order, and conflicting payment IDs cannot change accounting', async () => {
+  const order = await createLiveOrder();
+  assert.equal((await verify(order, 'pay_expiry_test', 'owner')).status, 403);
+  assert.equal((await verify('order_missing')).status, 404);
+  assert.equal((await request(f.app).post('/api/donations/verify').set('Authorization', 'Bearer ' + f.token('donor'))
+    .send({ razorpay_order_id: order, razorpay_payment_id: 'pay_test', razorpay_signature: 'invalid' })).status, 400);
+  assert.equal(await campaignTotal(), 10);
+  assert.equal((await verify(order)).status, 200);
+  assert.equal((await verify(order, 'pay_different')).status, 409);
+  assert.equal(await campaignTotal(), 60);
+});
+
+test('late failure webhooks never overwrite a completed captured payment', async () => {
+  const order = await createLiveOrder();
+  assert.equal((await verify(order)).status, 200);
+  assert.equal((await webhook(order, 'payment.failed')).status, 200);
+  assert.equal((await f.db.query('SELECT status FROM public.donations WHERE razorpay_order_id=$1', [order])).rows[0].status, 'completed');
+  assert.equal(await campaignTotal(), 60);
+});
+
+test('database users without service_role cannot invoke the payment settlement function', async () => {
+  await assert.rejects(f.db.transaction(async tx => {
+    await tx.exec('SET LOCAL ROLE authenticated');
+    await tx.query('SELECT public.settle_campaign_payment($1,$2)', ['order_test', 'pay_test']);
+  }), /permission denied/);
+});
+
+test('the settlement migration can be reapplied without changing historical donations', async () => {
+  const before = await rows('donations');
+  await f.db.exec(require('fs').readFileSync(require('path').join(__dirname, '../../src/config/migrations/013_campaign_expiry_payments.sql'), 'utf8'));
+  assert.deepEqual(await rows('donations'), before);
+});
