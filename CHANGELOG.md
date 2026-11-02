@@ -10,6 +10,10 @@
   fixture to exercise newer campaign detail features alongside progress updates.
 - No shared database writes or environment changes; PR title and issue remain
   **[CAMPAIGN] Campaign owner posts progress update (FR-09)** and **#12**.
+- Before publishing, integrated newer main `d9c48d1` without conflicts. Frontend
+  build and progress-update browser/integration checks passed. Full backend run:
+  218 passed, 12 login-test failures from the authentication shortcut inherited
+  unchanged from main. Recorded the regression in the feature guide/PR.
 
 ## 2026-10-26: Issue #12 campaign progress updates
 
