@@ -65,4 +65,31 @@ const getMyDonations = async (req, res) => {
   }
 };
 
-module.exports = { getMyDonations };
+// Get campaigns created by the logged-in user
+const getMyCampaigns = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { data, error } = await supabase
+      .from('campaigns')
+      .select('id, title, status, is_verified, rejection_reason, created_at')
+      .eq('owner_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching user campaigns:', error.message);
+      return res.status(500).json({ error: 'Failed to fetch campaigns' });
+    }
+
+    return res.status(200).json({ campaigns: data || [] });
+  } catch (err) {
+    console.error('Unexpected campaign-fetch error:', err.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+module.exports = { getMyDonations, getMyCampaigns };

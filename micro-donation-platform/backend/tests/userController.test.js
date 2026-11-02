@@ -4,7 +4,15 @@ jest.mock('../src/config/supabase', () => ({
 }));
 
 const supabase = require('../src/config/supabase');
-const { getMyDonations } = require('../src/controllers/userController');
+
+const {
+  getMyDonations,
+  getMyCampaigns,
+} = require('../src/controllers/userController');
+
+// ==========================================
+// Tests for getMyDonations (FR-19)
+// ==========================================
 
 describe('User Controller - getMyDonations (FR-19)', () => {
   let req;
@@ -78,13 +86,17 @@ describe('User Controller - getMyDonations (FR-19)', () => {
     await getMyDonations(req, res);
 
     expect(supabase.from).toHaveBeenCalledWith('donations');
+
     expect(chain.select).toHaveBeenCalledWith(
       'id, campaign_id, amount, is_anonymous, status, created_at, campaigns(title)'
     );
+
     expect(chain.eq).toHaveBeenCalledWith('donor_id', 'donor-123');
+
     expect(chain.order).toHaveBeenCalledWith('created_at', {
       ascending: false,
     });
+
     expect(res.status).toHaveBeenCalledWith(200);
 
     expect(res.json).toHaveBeenCalledWith({
@@ -114,17 +126,157 @@ describe('User Controller - getMyDonations (FR-19)', () => {
     await getMyDonations(req, res);
 
     expect(res.status).toHaveBeenCalledWith(500);
+
     expect(res.json).toHaveBeenCalledWith({
       error: 'Failed to fetch donation history',
     });
   });
 
   test('returns 500 on unexpected exception', async () => {
-    chain.order.mockRejectedValue(new Error('Unexpected network crash'));
+    chain.order.mockRejectedValue(
+      new Error('Unexpected network crash')
+    );
 
     await getMyDonations(req, res);
 
     expect(res.status).toHaveBeenCalledWith(500);
+
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Internal server error',
+    });
+  });
+});
+
+// ==========================================
+// Tests for getMyCampaigns (Issue #35)
+// ==========================================
+
+describe('User Controller - getMyCampaigns (Issue #35)', () => {
+  let req;
+  let res;
+  let chain;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    req = {
+      user: { id: 'owner-123' },
+    };
+
+    res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    };
+
+    chain = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      order: jest.fn(),
+    };
+
+    supabase.from.mockReturnValue(chain);
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('returns 401 if user is not logged in', async () => {
+    req.user = null;
+
+    await getMyCampaigns(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Authentication required',
+    });
+  });
+
+  test('returns campaigns belonging to the logged-in user', async () => {
+    const mockCampaigns = [
+      {
+        id: 'camp-1',
+        title: 'School Supplies',
+        status: 'active',
+        is_verified: true,
+        rejection_reason: null,
+      },
+      {
+        id: 'camp-2',
+        title: 'Medical Help',
+        status: 'rejected',
+        is_verified: false,
+        rejection_reason: 'Please upload a valid document',
+      },
+    ];
+
+    chain.order.mockResolvedValue({
+      data: mockCampaigns,
+      error: null,
+    });
+
+    await getMyCampaigns(req, res);
+
+    expect(supabase.from).toHaveBeenCalledWith('campaigns');
+
+    expect(chain.select).toHaveBeenCalledWith(
+      'id, title, status, is_verified, rejection_reason, created_at'
+    );
+
+    expect(chain.eq).toHaveBeenCalledWith('owner_id', 'owner-123');
+
+    expect(chain.order).toHaveBeenCalledWith('created_at', {
+      ascending: false,
+    });
+
+    expect(res.status).toHaveBeenCalledWith(200);
+
+    expect(res.json).toHaveBeenCalledWith({
+      campaigns: mockCampaigns,
+    });
+  });
+
+  test('returns an empty list if the user has no campaigns', async () => {
+    chain.order.mockResolvedValue({
+      data: null,
+      error: null,
+    });
+
+    await getMyCampaigns(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+
+    expect(res.json).toHaveBeenCalledWith({
+      campaigns: [],
+    });
+  });
+
+  test('returns 500 on database error', async () => {
+    chain.order.mockResolvedValue({
+      data: null,
+      error: { message: 'Database error' },
+    });
+
+    await getMyCampaigns(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Failed to fetch campaigns',
+    });
+  });
+
+  test('returns 500 on unexpected exception', async () => {
+    chain.order.mockRejectedValue(
+      new Error('Unexpected network error')
+    );
+
+    await getMyCampaigns(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+
     expect(res.json).toHaveBeenCalledWith({
       error: 'Internal server error',
     });

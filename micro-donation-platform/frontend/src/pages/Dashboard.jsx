@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../utils/api';
@@ -28,6 +29,7 @@ export default function Dashboard() {
   });
 
   const [donations, setDonations] = useState([]);
+  const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -37,6 +39,7 @@ export default function Dashboard() {
 
     try {
       const response = await api.get('/users/me/donations');
+      const campaignResponse = await api.get('/users/me/campaigns');
 
       setStats(
         response.data.stats || {
@@ -46,10 +49,11 @@ export default function Dashboard() {
       );
 
       setDonations(response.data.donations || []);
+      setCampaigns(campaignResponse.data.campaigns || []);
     } catch (err) {
       setError(
         err.response?.data?.error ||
-          'Could not load donation history. Please try again.'
+          'Could not load dashboard data. Please try again.'
       );
     } finally {
       setLoading(false);
@@ -80,7 +84,7 @@ export default function Dashboard() {
         }}
       >
         <p style={{ color: '#A16207', fontSize: '0.9rem' }}>
-          Loading your donations...
+          Loading your dashboard...
         </p>
       </div>
     );
@@ -99,8 +103,8 @@ export default function Dashboard() {
           padding: '32px 16px',
         }}
       >
-        <h2>Your Donations</h2>
-        <p>Please log in to view your donation history.</p>
+        <h2>Your Dashboard</h2>
+        <p>Please log in to view your dashboard.</p>
         <Link to="/login">Log In</Link>
       </div>
     );
@@ -144,6 +148,7 @@ export default function Dashboard() {
         </p>
       </div>
 
+      {/* Donation Statistics */}
       <div
         style={{
           display: 'grid',
@@ -200,6 +205,7 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {/* Error Message */}
       {error && (
         <div
           role="alert"
@@ -226,6 +232,7 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Donation History */}
       {!error && donations.length === 0 && (
         <div
           style={{
@@ -336,6 +343,52 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* My Campaigns */}
+      <div style={{ marginTop: 36 }}>
+        <h2 style={{ color: '#7C2D12', marginBottom: 16 }}>
+          My Campaigns
+        </h2>
+
+        {campaigns.length === 0 ? (
+          <p style={{ color: '#92400E' }}>
+            You haven't created any campaigns yet.
+          </p>
+        ) : (
+          campaigns.map((campaign) => (
+            <div
+              key={campaign.id}
+              style={{
+                background: '#fff',
+                border: '1.5px solid #FED7AA',
+                borderRadius: 14,
+                padding: 20,
+                marginBottom: 12,
+              }}
+            >
+              <h3 style={{ color: '#7C2D12' }}>
+                {campaign.title}
+              </h3>
+
+              <p style={{ marginTop: 8, textTransform: 'capitalize' }}>
+                Status: {campaign.status?.replace('_', ' ')}
+              </p>
+
+              {campaign.is_verified && (
+                <p style={{ color: '#15803D', fontWeight: 700 }}>
+                  ✓ Verified
+                </p>
+              )}
+
+              {campaign.status === 'rejected' && campaign.rejection_reason && (
+                <p style={{ color: '#B91C1C', marginTop: 8 }}>
+                  Rejection reason: {campaign.rejection_reason}
+                </p>
+              )}
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }
