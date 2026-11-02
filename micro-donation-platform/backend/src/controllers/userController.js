@@ -65,4 +65,40 @@ const getMyDonations = async (req, res) => {
   }
 };
 
-module.exports = { getMyDonations };
+
+// FR-20: Get campaigns created by the logged-in user
+const getMyCampaigns = async (req, res) => {
+  try {
+    const ownerId = req.user?.id;
+
+    if (!ownerId) {
+      return res.status(401).json({
+        error: 'Authentication required',
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('campaigns')
+      .select('id, title, goal_amount, raised_amount, status, category, deadline, created_at')
+      .eq('owner_id', ownerId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching owner campaigns:', error.message);
+      return res.status(500).json({
+        error: 'Failed to fetch campaigns',
+      });
+    }
+
+    return res.status(200).json({
+      campaigns: data || [],
+    });
+  } catch (err) {
+    console.error('Unexpected owner-campaign error:', err.message);
+    return res.status(500).json({
+      error: 'Internal server error',
+    });
+  }
+};
+
+module.exports = { getMyDonations, getMyCampaigns };
