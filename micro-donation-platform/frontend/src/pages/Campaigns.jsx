@@ -2,8 +2,27 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import CampaignCard from '../components/campaign/CampaignCard';
 
-const CATEGORIES = ['All', 'Healthcare', 'Education', 'Relief', 'Animals', 'Community', 'Environment'];
-const CAT_ICONS = { Healthcare:'🏥', Education:'📚', Relief:'🤝', Animals:'🐾', Community:'🏘️', Environment:'🌱', All:'✨' };
+const CATEGORIES = [
+  'All',
+  'Education',
+  'Medical',
+  'Food',
+  'Environment',
+  'Animals',
+  'Shelter',
+  'Emergency'
+];
+
+const CAT_ICONS = {
+  All: '✨',
+  Education: '📚',
+  Medical: '🏥',
+  Food: '🍲',
+  Environment: '🌱',
+  Animals: '🐾',
+  Shelter: '🏠',
+  Emergency: '🚨'
+};
 
 export default function Campaigns() {
   const [campaigns, setCampaigns]       = useState([]);
