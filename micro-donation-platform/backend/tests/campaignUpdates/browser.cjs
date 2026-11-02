@@ -12,6 +12,10 @@ async function run() {
   try {
     fixture = await createFixture();
     await fixture.seed();
+    // Teammates added these detail fields after this PR; exercise them alongside updates.
+    await fixture.db.exec('ALTER TABLE public.campaigns ADD COLUMN impact_statements text[], ADD COLUMN is_verified boolean DEFAULT false');
+    await fixture.db.query('UPDATE public.campaigns SET impact_statements=$1, is_verified=true WHERE id=$2', [['Books for local students'], fixture.ids.campaign]);
+    await fixture.db.query("INSERT INTO public.donations (campaign_id, donor_id, amount, status) VALUES ($1,$2,50,'completed')", [fixture.ids.campaign, fixture.ids.donor]);
     for (const [date, content] of [['2020-01-03', 'Third update'], ['2020-01-01', 'First update'], ['2020-01-02', 'Second update']]) {
       await fixture.db.query('INSERT INTO public.campaign_updates (campaign_id,content,created_at) VALUES ($1,$2,$3)', [fixture.ids.campaign, content, date]);
     }
@@ -49,6 +53,12 @@ async function run() {
     stage = 'owner timeline';
     await owner.page.goto(url);
     await owner.page.getByText('First update', { exact: true }).waitFor();
+    await owner.page.getByText('Books for local students', { exact: true }).waitFor();
+    await owner.page.getByRole('heading', { name: 'Recent Supporters' }).waitFor();
+    await owner.page.getByText('donor', { exact: true }).waitFor();
+    assert.equal(await owner.page.getByRole('button', { name: /share/i }).count(), 1);
+    await owner.page.getByText(/\d+ days left/, { exact: false }).first().waitFor();
+    console.log('PASS: sharing, countdown, impact statements, and recent supporters preserved');
     const section = owner.page.getByRole('region', { name: 'Progress updates' });
     assert.deepEqual(await section.locator('ol li p').allTextContents(), ['First update', 'Second update', 'Third update']);
     assert.equal(await section.locator('time').count(), 3);

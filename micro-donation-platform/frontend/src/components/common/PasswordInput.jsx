@@ -1,15 +1,33 @@
 import { useState } from 'react';
 
-export default function PasswordInput({ className = '', ...props }) {
+export default function PasswordInput({ style: styleProp = {}, ...props }) {
   const [visible, setVisible] = useState(false);
+
+  const baseStyle = {
+    width: '100%', padding: '10px 44px 10px 14px', borderRadius: 10,
+    border: '1.5px solid #FED7AA', background: '#FFF7ED',
+    fontSize: '0.9rem', color: '#1C0A00', outline: 'none',
+    boxSizing: 'border-box', fontFamily: 'inherit',
+    ...styleProp,
+  };
+
   return (
-    <div className="relative">
-      <input {...props} type={visible ? 'text' : 'password'} className={`mt-1 w-full rounded-lg border border-gray-300 py-2 pl-3 pr-12 ${className}`} />
-      <button type="button" onClick={() => setVisible(value => !value)}
-        disabled={props.disabled} aria-label={visible ? 'Hide password' : 'Show password'}
+    <div style={{ position: 'relative', marginTop: 6 }}>
+      <input {...props} type={visible ? 'text' : 'password'} style={baseStyle}
+        onFocus={e => { e.target.style.borderColor = '#EA580C'; if (props.onFocus) props.onFocus(e); }}
+        onBlur={e => { e.target.style.borderColor = '#FED7AA'; if (props.onBlur) props.onBlur(e); }}
+      />
+      <button type="button" onClick={() => setVisible(v => !v)}
+        disabled={props.disabled}
+        aria-label={visible ? 'Hide password' : 'Show password'}
         aria-pressed={visible} aria-controls={props.id}
-        className="absolute inset-y-0 right-0 mt-1 flex w-11 items-center justify-center rounded-r-lg text-gray-500 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
+        style={{
+          position: 'absolute', right: 0, top: 0, bottom: 0, width: 42,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: '#A16207',
+        }}>
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ width: 18, height: 18 }}>
           <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
           <circle cx="12" cy="12" r="3" />
           {visible && <path d="m3 3 18 18" />}

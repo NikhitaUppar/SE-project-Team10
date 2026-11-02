@@ -7,11 +7,13 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const {
   getCampaigns,
   getCampaignById,
+  getCampaignDonations,
   createCampaign,
   uploadCampaignFile,
   postUpdate,
   getCampaignUpdates,
   getCampaignStats,
+  getPublicStats,
 } = require('../controllers/campaignController');
 
 const upload = multer({
@@ -57,8 +59,10 @@ const handleCampaignUpload = (req, res, next) => {
 };
 
 router.get('/', getCampaigns);
+router.get('/public-stats', getPublicStats); // must be before /:id
 router.get('/:id', getCampaignById);
 router.get('/:id/updates', getCampaignUpdates);
+router.get('/:id/donations', getCampaignDonations);
 router.get('/:id/stats', authenticate, getCampaignStats);
 router.post('/', authenticate, createCampaign);
 router.post(
