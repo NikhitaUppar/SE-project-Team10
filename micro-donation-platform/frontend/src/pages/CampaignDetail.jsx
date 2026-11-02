@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import ShareButton from '../components/campaign/ShareButton';
+import RazorpayCheckoutModal from '../components/campaign/RazorpayCheckoutModal';
 import { getRemainingDaysText } from '../utils/dateUtils';
 
 export default function CampaignDetail() {
@@ -16,6 +17,8 @@ export default function CampaignDetail() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(null);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [checkoutOrderData, setCheckoutOrderData] = useState(null);
 
   useEffect(() => {
     const fetchCampaign = async () => {
@@ -65,81 +68,53 @@ export default function CampaignDetail() {
 
       const { order_id, amount: orderAmount, currency, key_id } = res.data;
 
-      // 2. Open Razorpay checkout modal
-      if (!window.Razorpay) {
-        throw new Error('Razorpay SDK script not found. Please refresh the page.');
-      }
-
-      const options = {
-        key: key_id || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
-        amount: orderAmount,
-        currency: currency || 'INR',
-        name: 'Micro-Donation Platform',
-        description: `Donation to ${campaign?.title || 'Cause'}`,
-        order_id: order_id,
-        handler: async function (response) {
-          const paymentId = response.razorpay_payment_id || `pay_mock_${Date.now()}`;
-          const orderId = response.razorpay_order_id || order_id;
-          const signature = response.razorpay_signature || 'dev_test_sig';
-
-          let receiptSent = false;
-          try {
-            const verifyRes = await api.post('/donations/verify', {
-              razorpay_order_id: orderId,
-              razorpay_payment_id: paymentId,
-              razorpay_signature: signature,
-            });
-            receiptSent = verifyRes.data?.receipt_sent;
-          } catch (vErr) {
-            console.warn('Payment verification callback notice:', vErr.message);
-          }
-
-          setPaymentSuccess({
-            paymentId,
-            orderId,
-            amount: numericAmount,
-            receiptSent,
-          });
-          setCampaign((prev) => ({
-            ...prev,
-            raised_amount: (Number(prev?.raised_amount) || 0) + numericAmount,
-          }));
-          setIsSubmitting(false);
-        },
-        prefill: {
-          name: isAnonymous ? 'Anonymous Donor' : user?.display_name || 'Donor',
-          email: user?.email || 'donor@example.com',
-        },
-        theme: {
-          color: '#4F46E5',
-        },
-        modal: {
-          ondismiss: function () {
-            setIsSubmitting(false);
-          },
-        },
-      };
-
-      try {
-        const razorpayInstance = new window.Razorpay(options);
-        razorpayInstance.on('payment.failed', function (response) {
-          setError(`Payment failed: ${response.error?.description || 'Transaction unsuccessful'}`);
-          setIsSubmitting(false);
-        });
-        razorpayInstance.open();
-      } catch (modalErr) {
-        // If dummy Razorpay keys are used in dev mode, simulate successful checkout response
-        console.warn('Razorpay modal error (using dev simulation fallback):', modalErr);
-        options.handler({
-          razorpay_payment_id: `pay_test_${Date.now()}`,
-          razorpay_order_id: order_id,
-        });
-      }
+      // 2. Open interactive Razorpay Checkout Modal
+      setCheckoutOrderData({
+        order_id,
+        amount: numericAmount,
+        currency,
+        key_id,
+      });
+      setIsCheckoutOpen(true);
+      setIsSubmitting(false);
     } catch (err) {
       const msg = err.response?.data?.error || err.message || 'Failed to initialize payment.';
       setError(msg);
       setIsSubmitting(false);
     }
+  };
+
+  const handleCheckoutSuccess = async (response) => {
+    setIsCheckoutOpen(false);
+    setIsSubmitting(true);
+
+    const paymentId = response.razorpay_payment_id || `pay_mock_${Date.now()}`;
+    const orderId = response.razorpay_order_id || checkoutOrderData?.order_id;
+    const signature = response.razorpay_signature || 'dev_test_sig';
+
+    let receiptSent = false;
+    try {
+      const verifyRes = await api.post('/donations/verify', {
+        razorpay_order_id: orderId,
+        razorpay_payment_id: paymentId,
+        razorpay_signature: signature,
+      });
+      receiptSent = verifyRes.data?.receipt_sent;
+    } catch (vErr) {
+      console.warn('Payment verification callback notice:', vErr.message);
+    }
+
+    setPaymentSuccess({
+      paymentId,
+      orderId,
+      amount: Number(amount),
+      receiptSent,
+    });
+    setCampaign((prev) => ({
+      ...prev,
+      raised_amount: (Number(prev?.raised_amount) || 0) + Number(amount),
+    }));
+    setIsSubmitting(false);
   };
 
   if (loading) {
@@ -357,6 +332,17 @@ export default function CampaignDetail() {
           </div>
         </div>
       </div>
+      {/* Interactive Razorpay Checkout Modal */}
+      <RazorpayCheckoutModal
+        isOpen={isCheckoutOpen}
+        onClose={() => setIsCheckoutOpen(false)}
+        onSuccess={handleCheckoutSuccess}
+        amount={Number(amount)}
+        campaignTitle={campaign?.title}
+        donorName={isAnonymous ? 'Anonymous Donor' : user?.display_name || 'Donor'}
+        donorEmail={user?.email || 'donor@example.com'}
+        orderId={checkoutOrderData?.order_id}
+      />
     </div>
   );
 }
