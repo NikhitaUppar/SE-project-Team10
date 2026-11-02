@@ -19,84 +19,40 @@ const date = (value) =>
       })
     : '—';
 
+const buttonStyle = {
+  display: 'inline-block',
+  background: '#EA580C',
+  color: '#fff',
+  padding: '12px 22px',
+  borderRadius: 10,
+  textDecoration: 'none',
+  fontWeight: 700,
+  marginBottom: 24,
+};
+
 export default function Dashboard() {
   const { user, loading: authLoading } = useAuth();
+
+  const userRole = String(user?.role || '')
+    .trim()
+    .toLowerCase();
+
+  const isCampaignOwner =
+    userRole === 'campaign_owner' ||
+    userRole === 'campaigner';
 
   const [stats, setStats] = useState({
     totalDonated: 0,
     campaignsSupported: 0,
   });
+
   const [donations, setDonations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const [ownerCampaigns, setOwnerCampaigns] = useState([]);
-  const [ownerLoading, setOwnerLoading] = useState(true);
+  const [ownerLoading, setOwnerLoading] = useState(false);
   const [ownerError, setOwnerError] = useState('');
-
-  const loadDonations = async () => {
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await api.get('/users/me/donations');
-
-      setStats(
-        response.data.stats || {
-          totalDonated: 0,
-          campaignsSupported: 0,
-        }
-      );
-
-      setDonations(response.data.donations || []);
-    } catch (err) {
-      setError(
-        err.response?.data?.error ||
-          'Could not load donation history. Please try again.'
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadOwnerCampaigns = async () => {
-    setOwnerLoading(true);
-    setOwnerError('');
-
-    try {
-      const response = await api.get('/users/me/campaigns');
-      const campaigns = response.data.campaigns || [];
-
-      const campaignsWithStats = await Promise.all(
-        campaigns.map(async (campaign) => {
-          try {
-            const statsResponse = await api.get(
-              `/campaigns/${campaign.id}/stats`
-            );
-
-            return {
-              ...campaign,
-              fundraising: statsResponse.data,
-            };
-          } catch {
-            return {
-              ...campaign,
-              fundraising: null,
-            };
-          }
-        })
-      );
-
-      setOwnerCampaigns(campaignsWithStats);
-    } catch (err) {
-      setOwnerError(
-        err.response?.data?.error ||
-          'Could not load your campaigns. Please try again.'
-      );
-    } finally {
-      setOwnerLoading(false);
-    }
-  };
 
   useEffect(() => {
     if (authLoading) return;
@@ -107,9 +63,94 @@ export default function Dashboard() {
       return;
     }
 
+    let active = true;
+
+    const loadDonations = async () => {
+      setLoading(true);
+      setError('');
+
+      try {
+        const response = await api.get('/users/me/donations');
+
+        if (!active) return;
+
+        setStats(
+          response.data.stats || {
+            totalDonated: 0,
+            campaignsSupported: 0,
+          }
+        );
+
+        setDonations(response.data.donations || []);
+      } catch (err) {
+        if (!active) return;
+
+        setError(
+          err.response?.data?.error ||
+            'Could not load donation history. Please try again.'
+        );
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    const loadOwnerCampaigns = async () => {
+      setOwnerLoading(true);
+      setOwnerError('');
+
+      try {
+        const response = await api.get('/users/me/campaigns');
+
+        if (!active) return;
+
+        const campaigns = response.data.campaigns || [];
+
+        const campaignsWithStats = await Promise.all(
+          campaigns.map(async (campaign) => {
+            try {
+              const statsResponse = await api.get(
+                `/campaigns/${campaign.id}/stats`
+              );
+
+              return {
+                ...campaign,
+                fundraising: statsResponse.data,
+              };
+            } catch {
+              return {
+                ...campaign,
+                fundraising: null,
+              };
+            }
+          })
+        );
+
+        if (active) setOwnerCampaigns(campaignsWithStats);
+      } catch (err) {
+        if (!active) return;
+
+        setOwnerError(
+          err.response?.data?.error ||
+            'Could not load your campaigns. Please try again.'
+        );
+      } finally {
+        if (active) setOwnerLoading(false);
+      }
+    };
+
     loadDonations();
-    loadOwnerCampaigns();
-  }, [user, authLoading]);
+
+    // Load campaign statistics only for campaign owners.
+    if (isCampaignOwner) {
+      loadOwnerCampaigns();
+    } else {
+      setOwnerLoading(false);
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [user, authLoading, isCampaignOwner]);
 
   if (authLoading || loading) {
     return (
@@ -158,6 +199,8 @@ export default function Dashboard() {
         padding: '32px 16px 64px',
       }}
     >
+      {/* WELCOME SECTION */}
+
       <div style={{ marginBottom: 32 }}>
         <p
           style={{
@@ -254,12 +297,6 @@ export default function Dashboard() {
           }}
         >
           {error}
-          <button
-            onClick={loadDonations}
-            style={{ marginLeft: 12, textDecoration: 'underline' }}
-          >
-            Try again
-          </button>
         </div>
       )}
 
@@ -292,7 +329,12 @@ export default function Dashboard() {
             marginBottom: 40,
           }}
         >
-          <div style={{ padding: '20px 24px', borderBottom: '1px solid #FED7AA' }}>
+          <div
+            style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid #FED7AA',
+            }}
+          >
             <h2 style={{ color: '#7C2D12', fontSize: '1rem' }}>
               Donation History
             </h2>
@@ -339,11 +381,19 @@ export default function Dashboard() {
                         donation.campaigns?.title ||
                         'Campaign'}
                     </td>
-                    <td style={{ padding: 14 }}>{money(donation.amount)}</td>
-                    <td style={{ padding: 14 }}>{date(donation.created_at)}</td>
+
+                    <td style={{ padding: 14 }}>
+                      {money(donation.amount)}
+                    </td>
+
+                    <td style={{ padding: 14 }}>
+                      {date(donation.created_at)}
+                    </td>
+
                     <td style={{ padding: 14 }}>
                       {donation.is_anonymous ? 'Anonymous' : 'Public'}
                     </td>
+
                     <td
                       style={{
                         padding: 14,
@@ -383,8 +433,23 @@ export default function Dashboard() {
           Track the fundraising progress of campaigns you created.
         </p>
 
+        {/* CREATE CAMPAIGN BUTTON */}
+
+        <Link to="/campaigns/new" style={buttonStyle}>
+          + Create Campaign
+        </Link>
+
+        {!isCampaignOwner && (
+          <p style={{ color: '#92400E', fontSize: '0.85rem' }}>
+            Your account role is currently: {userRole || 'not available'}.
+            Campaign creation may require a campaign-owner account.
+          </p>
+        )}
+
         {ownerLoading && (
-          <p style={{ color: '#92400E' }}>Loading your campaigns...</p>
+          <p style={{ color: '#92400E' }}>
+            Loading your campaigns...
+          </p>
         )}
 
         {ownerError && (
@@ -400,44 +465,59 @@ export default function Dashboard() {
           >
             {ownerError}
             <button
-              onClick={loadOwnerCampaigns}
+              onClick={() => window.location.reload()}
               style={{ marginLeft: 12, textDecoration: 'underline' }}
             >
-              Try again
+              Refresh
             </button>
           </div>
         )}
 
-        {!ownerLoading && !ownerError && ownerCampaigns.length === 0 && (
-          <div
-            style={{
-              background: '#fff',
-              border: '2px dashed #FED7AA',
-              borderRadius: 20,
-              padding: 36,
-              textAlign: 'center',
-            }}
-          >
-            <h3 style={{ color: '#7C2D12' }}>No campaigns created yet</h3>
-            <p style={{ color: '#92400E', marginBottom: 20 }}>
-              Campaigns you create will appear here with their fundraising
-              statistics.
-            </p>
-            <Link to="/campaigns">Explore Campaigns</Link>
-          </div>
-        )}
+        {!ownerLoading &&
+          !ownerError &&
+          isCampaignOwner &&
+          ownerCampaigns.length === 0 && (
+            <div
+              style={{
+                background: '#fff',
+                border: '2px dashed #FED7AA',
+                borderRadius: 20,
+                padding: 36,
+                textAlign: 'center',
+              }}
+            >
+              <h3 style={{ color: '#7C2D12' }}>
+                No campaigns created yet
+              </h3>
+
+              <p style={{ color: '#92400E', marginBottom: 20 }}>
+                Campaigns you create will appear here with their
+                fundraising statistics.
+              </p>
+
+              <Link to="/campaigns">Explore Campaigns</Link>
+            </div>
+          )}
 
         <div style={{ display: 'grid', gap: 24 }}>
           {ownerCampaigns.map((campaign) => {
             const fundraising = campaign.fundraising;
             const goal = Number(campaign.goal_amount || 0);
+
             const raised = Number(
-              fundraising?.stats?.total_raised ?? campaign.raised_amount ?? 0
+              fundraising?.stats?.total_raised ??
+                campaign.raised_amount ??
+                0
             );
-            const donorCount = fundraising?.stats?.donor_count ?? 0;
+
+            const donorCount =
+              fundraising?.stats?.donor_count ?? 0;
+
             const progress =
               goal > 0 ? Math.min(100, (raised / goal) * 100) : 0;
+
             const timeline = fundraising?.timeline || [];
+
             const maxAmount = Math.max(
               ...timeline.map((item) => Number(item.amount || 0)),
               1
@@ -467,6 +547,7 @@ export default function Dashboard() {
                     <h3 style={{ color: '#7C2D12', margin: '0 0 8px' }}>
                       {campaign.title}
                     </h3>
+
                     <span
                       style={{
                         color: '#92400E',
@@ -474,20 +555,31 @@ export default function Dashboard() {
                         textTransform: 'capitalize',
                       }}
                     >
-                      {String(campaign.status || 'unknown').replaceAll('_', ' ')}
+                      {String(campaign.status || 'unknown').replaceAll(
+                        '_',
+                        ' '
+                      )}
                     </span>
-                  
+
                     {campaign.is_verified && (
-                      <p style={{ color: '#15803D', fontWeight: 700, marginTop: 8 }}>
+                      <p
+                        style={{
+                          color: '#15803D',
+                          fontWeight: 700,
+                          marginTop: 8,
+                        }}
+                      >
                         ✓ Verified
                       </p>
                     )}
-                    {campaign.status === 'rejected' && campaign.rejection_reason && (
-                      <p style={{ color: '#B91C1C', marginTop: 8 }}>
-                        Rejection reason: {campaign.rejection_reason}
-                      </p>
-                    )}
-</div>
+
+                    {campaign.status === 'rejected' &&
+                      campaign.rejection_reason && (
+                        <p style={{ color: '#B91C1C', marginTop: 8 }}>
+                          Rejection reason: {campaign.rejection_reason}
+                        </p>
+                      )}
+                  </div>
 
                   <Link to={`/campaigns/${campaign.id}`}>
                     View Campaign
@@ -512,6 +604,7 @@ export default function Dashboard() {
                       <strong style={{ color: '#C2410C' }}>
                         {money(raised)} raised
                       </strong>
+
                       <span style={{ color: '#78350F' }}>
                         Goal: {money(goal)}
                       </span>
@@ -529,7 +622,7 @@ export default function Dashboard() {
                         style={{
                           width: `${progress}%`,
                           height: '100%',
-                          background: '#EA580C',
+                          background: '#EA5808',
                           borderRadius: 20,
                         }}
                       />
@@ -548,7 +641,8 @@ export default function Dashboard() {
                     <div
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))',
+                        gridTemplateColumns:
+                          'repeat(auto-fit,minmax(130px,1fr))',
                         gap: 12,
                         marginTop: 20,
                       }}
@@ -560,9 +654,15 @@ export default function Dashboard() {
                           padding: 16,
                         }}
                       >
-                        <strong style={{ color: '#C2410C', fontSize: '1.3rem' }}>
+                        <strong
+                          style={{
+                            color: '#C2410C',
+                            fontSize: '1.3rem',
+                          }}
+                        >
                           {donorCount}
                         </strong>
+
                         <p style={{ color: '#78350F', fontSize: '0.8rem' }}>
                           Unique Donors
                         </p>
@@ -575,9 +675,15 @@ export default function Dashboard() {
                           padding: 16,
                         }}
                       >
-                        <strong style={{ color: '#C2410C', fontSize: '1.3rem' }}>
+                        <strong
+                          style={{
+                            color: '#C2410C',
+                            fontSize: '1.3rem',
+                          }}
+                        >
                           {timeline.length}
                         </strong>
+
                         <p style={{ color: '#78350F', fontSize: '0.8rem' }}>
                           Donation Days
                         </p>
@@ -590,7 +696,12 @@ export default function Dashboard() {
                       </h4>
 
                       {timeline.length === 0 ? (
-                        <p style={{ color: '#92400E', fontSize: '0.9rem' }}>
+                        <p
+                          style={{
+                            color: '#92400E',
+                            fontSize: '0.9rem',
+                          }}
+                        >
                           No completed donations to display yet.
                         </p>
                       ) : (
@@ -609,6 +720,7 @@ export default function Dashboard() {
                         >
                           {timeline.map((item) => {
                             const amount = Number(item.amount || 0);
+
                             const height = Math.max(
                               8,
                               (amount / maxAmount) * 110
@@ -636,6 +748,7 @@ export default function Dashboard() {
                                 >
                                   {money(amount)}
                                 </span>
+
                                 <div
                                   style={{
                                     width: 32,
@@ -644,6 +757,7 @@ export default function Dashboard() {
                                     borderRadius: '6px 6px 0 0',
                                   }}
                                 />
+
                                 <span
                                   style={{
                                     color: '#92400E',
