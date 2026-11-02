@@ -10,7 +10,7 @@ async function createFixture() {
   await db.exec('CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;');
   await db.exec(fs.readFileSync(path.join(__dirname, '../../src/config/schema.sql'), 'utf8'));
   await db.exec(fs.readFileSync(path.join(__dirname, '../../src/config/migrations/006_password_reset.sql'), 'utf8'));
-  await db.exec('GRANT USAGE ON SCHEMA public TO service_role; GRANT SELECT ON public.users TO service_role; GRANT SELECT, INSERT ON public.campaigns, public.campaign_updates TO service_role;');
+  await db.exec('GRANT USAGE ON SCHEMA public TO service_role; GRANT SELECT ON public.users, public.donations TO service_role; GRANT SELECT, INSERT ON public.campaigns, public.campaign_updates TO service_role;');
   const postgrest = await startCampaignUpdatesPostgrest(db);
   Object.assign(process.env, {
     SUPABASE_URL: postgrest.url, SUPABASE_SERVICE_KEY: 'isolated-test-key',

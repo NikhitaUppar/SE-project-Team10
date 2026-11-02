@@ -1,5 +1,16 @@
 # Project change record
 
+## 2026-11-02: PR #39 conflict resolution
+
+- Integrated main at `e1d4ab4` into the issue #12 feature branch and resolved
+  conflicts in README, campaign routes, and the campaign detail page.
+- Preserved sharing/countdown, impact information, recent supporters, and owner
+  stats alongside the progress timeline and role-protected owner posting.
+- Passed 230 backend tests and the frontend build. Updated the isolated browser
+  fixture to exercise newer campaign detail features alongside progress updates.
+- No shared database writes or environment changes; PR title and issue remain
+  **[CAMPAIGN] Campaign owner posts progress update (FR-09)** and **#12**.
+
 ## 2026-10-26: Issue #12 campaign progress updates
 
 - Safely fetched teammate changes, fast-forwarded local main to `509d358`,

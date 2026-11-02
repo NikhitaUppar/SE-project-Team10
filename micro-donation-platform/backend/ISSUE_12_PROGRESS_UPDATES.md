@@ -159,7 +159,7 @@ PostgreSQL and browser checks rather than a shared remote progress write.
 Created with the user's approval:
 [PR #39](https://github.com/NikhitaUppar/SE-project-Team10/pull/39), targeting `main`.
 
-Title: **[CAMPAIGN] Implement Campaign Progress Updates (FR-09)**
+Title: **[CAMPAIGN] Campaign owner posts progress update (FR-09)**
 
 Closes #12
 
@@ -178,3 +178,28 @@ passed. No credentials, `.env` files, or shared database writes are included.
 
 The user confirmed pushing and creating the PR on 2026-10-26. No automatic
 merge is authorized.
+
+## 2026-11-02: local conflict resolution for PR #39
+
+GitHub reported this PR as conflicting with `main`. Integrated `origin/main`
+at `e1d4ab4` into this feature branch. Resolved README, campaign routes, and
+campaign detail conflicts; the backend controller merged without a text conflict.
+The README keeps the team's final documentation and links this feature guide.
+The routes retain public donation history and owner statistics alongside the
+public progress timeline and role-protected posting endpoint.
+
+The detail page keeps the team's sharing/countdown, impact statements, supporting
+documents, recent supporters, donation controls, and current design. It also
+keeps this feature's real missing-campaign error, request cancellation, progress
+timeline, and owner form. The historical creation-form limitation above no longer
+applies to the integrated main version, which restores campaign creation.
+
+Validation: all **18 backend suites / 230 Jest tests passed**, including the
+**24 child PostgreSQL/JWT progress scenarios**; frontend production build passed.
+Updated the isolated test adapter to support the newer recent-supporter request,
+and extended browser coverage to check sharing, countdown, impact text, and donor
+history alongside progress updates. All isolated Chrome checks passed, including
+posting, reload persistence, validation/error retries, escaped HTML, reader roles,
+mobile layout, closed/missing campaigns, and browsing. No shared database records, credentials, or
+private environment files were changed. This follow-up is being verified locally;
+the PR has not been merged or renamed.
