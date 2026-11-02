@@ -2,24 +2,41 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 
+function MetricCard({ label, value, color }) {
+  return (
+    <div className={`rounded-xl p-5 text-white ${color}`}>
+      <p className="text-sm opacity-80 font-medium">{label}</p>
+      <p className="text-3xl font-bold mt-1">{value ?? '—'}</p>
+    </div>
+  );
+}
+
 export default function AdminPanel() {
   const { user, loading: authLoading } = useAuth();
 
+  const [metrics, setMetrics] = useState(null);
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reasons, setReasons] = useState({});
+  const [rejectModal, setRejectModal] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
   const [message, setMessage] = useState('');
 
-  const fetchCampaigns = async () => {
-    try {
-      setLoading(true);
-      setError('');
+  const fetchData = async () => {
+    setLoading(true);
+    setError('');
 
-      const response = await api.get('/admin/campaigns');
-      setCampaigns(response.data.campaigns || []);
+    try {
+      const [metricsRes, campaignsRes] = await Promise.all([
+        api.get('/admin/metrics'),
+        api.get('/admin/campaigns'),
+      ]);
+
+      setMetrics(metricsRes.data);
+      setCampaigns(campaignsRes.data.campaigns || []);
     } catch (err) {
-      setError(err.response?.data?.error || 'Unable to load campaigns.');
+      setError(err.response?.data?.error || 'Failed to load admin data');
     } finally {
       setLoading(false);
     }
@@ -27,7 +44,7 @@ export default function AdminPanel() {
 
   useEffect(() => {
     if (!authLoading && user?.role === 'admin') {
-      fetchCampaigns();
+      fetchData();
     } else if (!authLoading) {
       setLoading(false);
     }
@@ -37,25 +54,28 @@ export default function AdminPanel() {
     try {
       await api.patch(`/admin/campaigns/${id}/approve`);
       setMessage('Campaign approved and verified successfully!');
-      fetchCampaigns();
+      await fetchData();
     } catch (err) {
       setError(err.response?.data?.error || 'Approval failed.');
     }
   };
 
-  const rejectCampaign = async (id) => {
-    const reason = reasons[id]?.trim();
-
-    if (!reason) {
+  const rejectCampaign = async (id, reason) => {
+    if (!reason?.trim()) {
       setError('Please enter a rejection reason.');
       return;
     }
 
     try {
-      await api.patch(`/admin/campaigns/${id}/reject`, { reason });
+      await api.patch(`/admin/campaigns/${id}/reject`, {
+        reason: reason.trim(),
+      });
+
       setMessage('Campaign rejected successfully.');
+      setRejectModal(null);
+      setRejectReason('');
       setReasons((prev) => ({ ...prev, [id]: '' }));
-      fetchCampaigns();
+      await fetchData();
     } catch (err) {
       setError(err.response?.data?.error || 'Rejection failed.');
     }
@@ -76,29 +96,68 @@ export default function AdminPanel() {
     );
   }
 
+  if (loading) {
+    return <div className="text-center py-20 text-gray-500">Loading...</div>;
+  }
+
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
-      <h1 className="text-3xl font-bold mb-2">Admin Panel</h1>
+      <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
       <p className="text-gray-600 mb-8">
         Review campaign documents before approving campaigns.
       </p>
 
       {message && (
-        <p className="bg-green-100 text-green-700 p-3 rounded mb-4">
+        <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-lg">
           {message}
-        </p>
+          <button
+            className="ml-3"
+            onClick={() => setMessage('')}
+          >
+            ✕
+          </button>
+        </div>
       )}
 
       {error && (
-        <p className="bg-red-100 text-red-700 p-3 rounded mb-4">
+        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
           {error}
-        </p>
+        </div>
       )}
 
-      {loading ? (
-        <p>Loading campaigns...</p>
-      ) : campaigns.length === 0 ? (
-        <p className="text-gray-600">No campaigns waiting for approval.</p>
+      {metrics && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+          <MetricCard
+            label="Total Donations"
+            value={`₹${Number(metrics.totalDonations).toLocaleString('en-IN')}`}
+            color="bg-indigo-600"
+          />
+          <MetricCard
+            label="Active Campaigns"
+            value={metrics.activeCampaigns}
+            color="bg-emerald-600"
+          />
+          <MetricCard
+            label="Total Donors"
+            value={metrics.totalDonors}
+            color="bg-sky-600"
+          />
+          <MetricCard
+            label="Flagged Items"
+            value={metrics.flaggedItems}
+            color="bg-rose-600"
+          />
+        </div>
+      )}
+
+      <h2 className="text-xl font-semibold text-gray-700 mb-4">
+        Pending Campaign Approvals
+      </h2>
+
+      {campaigns.length === 0 ? (
+        <p className="text-gray-500">
+          No campaigns waiting for approval.
+        </p>
       ) : (
         <div className="space-y-6">
           {campaigns.map((campaign) => (
@@ -106,19 +165,28 @@ export default function AdminPanel() {
               key={campaign.id}
               className="bg-white border rounded-xl p-6 shadow-sm"
             >
-              <h2 className="text-xl font-bold">{campaign.title}</h2>
+              <h3 className="text-xl font-bold">{campaign.title}</h3>
 
               <p className="text-gray-600 mt-2">
                 {campaign.description}
               </p>
 
-              <p className="mt-3 text-sm text-gray-500">
-                Category: {campaign.category}
-              </p>
+              <div className="mt-3 flex flex-wrap gap-4 text-sm text-gray-500">
+                <span>Category: {campaign.category || 'N/A'}</span>
+                <span>
+                  Goal: ₹{Number(campaign.goal_amount).toLocaleString('en-IN')}
+                </span>
+                <span>
+                  Owner: {campaign.users?.display_name || campaign.users?.email || 'Unknown'}
+                </span>
+                <span>
+                  Submitted: {new Date(campaign.created_at).toLocaleDateString('en-IN')}
+                </span>
+              </div>
 
-              <h3 className="font-semibold mt-5 mb-2">
+              <h4 className="font-semibold mt-5 mb-2">
                 Uploaded Documents
-              </h3>
+              </h4>
 
               {campaign.campaign_files?.length > 0 ? (
                 <ul className="list-disc pl-5 space-y-2">
@@ -141,35 +209,23 @@ export default function AdminPanel() {
                 </p>
               )}
 
-              <div className="mt-6">
+              <div className="mt-6 flex flex-wrap gap-3">
                 <button
                   onClick={() => approveCampaign(campaign.id)}
-                  className="bg-green-600 text-white px-5 py-2 rounded-lg mr-3"
+                  className="bg-green-600 text-white px-5 py-2 rounded-lg"
                 >
                   Approve & Verify
                 </button>
 
-                <div className="mt-4">
-                  <textarea
-                    value={reasons[campaign.id] || ''}
-                    onChange={(e) =>
-                      setReasons((prev) => ({
-                        ...prev,
-                        [campaign.id]: e.target.value,
-                      }))
-                    }
-                    placeholder="Enter reason for rejection..."
-                    className="w-full border rounded-lg p-3"
-                    rows="2"
-                  />
-
-                  <button
-                    onClick={() => rejectCampaign(campaign.id)}
-                    className="bg-red-600 text-white px-5 py-2 rounded-lg mt-2"
-                  >
-                    Reject Campaign
-                  </button>
-                </div>
+                <button
+                  onClick={() => {
+                    setRejectModal(campaign.id);
+                    setRejectReason(reasons[campaign.id] || '');
+                  }}
+                  className="bg-red-600 text-white px-5 py-2 rounded-lg"
+                >
+                  Reject Campaign
+                </button>
               </div>
             </div>
           ))}
@@ -177,11 +233,52 @@ export default function AdminPanel() {
       )}
 
       <button
-        onClick={fetchCampaigns}
+        onClick={fetchData}
         className="mt-6 border px-4 py-2 rounded-lg"
       >
-        Refresh Campaigns
+        Refresh Dashboard
       </button>
+
+      {rejectModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="font-semibold text-gray-800 mb-3">
+              Reject Campaign
+            </h3>
+
+            <p className="text-sm text-gray-500 mb-4">
+              Enter the reason for rejection. It will be saved and shown to the campaign owner.
+            </p>
+
+            <textarea
+              className="w-full border rounded-lg p-3"
+              rows="3"
+              placeholder="Reason for rejection..."
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+            />
+
+            <div className="flex gap-3 mt-4 justify-end">
+              <button
+                onClick={() => {
+                  setRejectModal(null);
+                  setRejectReason('');
+                }}
+                className="px-4 py-2 border rounded-lg"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={() => rejectCampaign(rejectModal, rejectReason)}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg"
+              >
+                Confirm Reject
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
