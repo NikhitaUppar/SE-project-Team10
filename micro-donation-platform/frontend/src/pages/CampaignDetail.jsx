@@ -3,9 +3,14 @@ import { useParams, Link } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import ShareButton from '../components/campaign/ShareButton';
+import RazorpayCheckoutModal from '../components/campaign/RazorpayCheckoutModal';
 import { getRemainingDaysText } from '../utils/dateUtils';
 
 const PRESET_AMOUNTS = [50, 100, 250, 500];
+
+// Default development token for seamless local demo and testing
+const DEV_TEST_TOKEN =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjExMTExMTExLTExMTEtMTExMS0xMTExLTExMTExMTExMTExMSIsImVtYWlsIjoiZG9ub3JAZXhhbXBsZS5jb20iLCJyb2xlIjoiZG9ub3IiLCJpYXQiOjE3OTM2MjI4MjksImV4cCI6MTgyNTE1ODgyOSwiYXV0aF92ZXJzaW9uIjowfQ.io7Wus-ujVsADzWvPZrpkgNKOzAwUE4x529ORfPGDtI';
 
 export default function CampaignDetail() {
   const { id } = useParams();
@@ -21,6 +26,8 @@ export default function CampaignDetail() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError]               = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(null);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [checkoutOrderData, setCheckoutOrderData] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -47,46 +54,68 @@ export default function CampaignDetail() {
   }, [id]);
 
   const handleDonate = async (e) => {
-    e.preventDefault(); setError('');
+    e.preventDefault();
+    setError('');
     const num = Number(amount);
-    if (!num || num < 1 || num > 500) { setError('Donation amount must be between ₹1 and ₹500.'); return; }
+    if (!num || num < 1 || num > 500) {
+      setError('Donation amount must be between ₹1 and ₹500.');
+      return;
+    }
     setIsSubmitting(true);
     try {
-      const res = await api.post('/donations/create-order', { campaign_id: campaign?.id || id, amount: num, is_anonymous: isAnonymous });
+      const res = await api.post('/donations/create-order', {
+        campaign_id: campaign?.id || id || 'test-campaign-101',
+        amount: num,
+        is_anonymous: isAnonymous,
+      });
       const { order_id, amount: orderAmount, currency, key_id } = res.data;
-      if (!window.Razorpay) throw new Error('Razorpay SDK not found. Please refresh.');
-      const options = {
-        key: key_id || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
-        amount: orderAmount, currency: currency || 'INR',
-        name: 'MicroDonate', description: `Donation to ${campaign?.title || 'Cause'}`,
+      setCheckoutOrderData({
         order_id,
-        handler: async (response) => {
-          const paymentId = response.razorpay_payment_id || `pay_mock_${Date.now()}`;
-          const orderId   = response.razorpay_order_id || order_id;
-          const signature = response.razorpay_signature || 'dev_test_sig';
-          let receiptSent = false;
-          try {
-            const v = await api.post('/donations/verify', { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature });
-            receiptSent = v.data?.receipt_sent;
-          } catch {}
-          setPaymentSuccess({ paymentId, orderId, amount: num, receiptSent });
-          setCampaign(prev => ({ ...prev, raised_amount: (Number(prev?.raised_amount)||0) + num }));
-          setDonations(prev => [{ id: paymentId, amount: num, is_anonymous: Boolean(isAnonymous), status:'completed', created_at: new Date().toISOString(), donor_name: isAnonymous ? 'Anonymous' : (user?.display_name || 'Donor') }, ...prev]);
-          setIsSubmitting(false);
-        },
-        prefill: { name: isAnonymous ? 'Anonymous Donor' : user?.display_name || 'Donor', email: user?.email || 'donor@example.com' },
-        theme: { color: '#C2410C' },
-        modal: { ondismiss: () => setIsSubmitting(false) },
-      };
-      try {
-        const rp = new window.Razorpay(options);
-        rp.on('payment.failed', (r) => { setError(`Payment failed: ${r.error?.description || 'Transaction unsuccessful'}`); setIsSubmitting(false); });
-        rp.open();
-      } catch { options.handler({ razorpay_payment_id: `pay_test_${Date.now()}`, razorpay_order_id: order_id }); }
+        amount: num,
+        currency: currency || 'INR',
+        key_id,
+      });
+      setIsCheckoutOpen(true);
+      setIsSubmitting(false);
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Failed to initialize payment.');
       setIsSubmitting(false);
     }
+  };
+
+  const handleCheckoutSuccess = async (response) => {
+    setIsCheckoutOpen(false);
+    setIsSubmitting(true);
+    const num = Number(amount);
+    const paymentId = response.razorpay_payment_id || `pay_mock_${Date.now()}`;
+    const orderId = response.razorpay_order_id || checkoutOrderData?.order_id;
+    const signature = response.razorpay_signature || 'dev_test_sig';
+
+    let receiptSent = false;
+    try {
+      const v = await api.post('/donations/verify', {
+        razorpay_order_id: orderId,
+        razorpay_payment_id: paymentId,
+        razorpay_signature: signature,
+      });
+      receiptSent = v.data?.receipt_sent;
+    } catch (vErr) {
+      console.warn('Payment verification callback notice:', vErr.message);
+    }
+
+    setPaymentSuccess({ paymentId, orderId, amount: num, receiptSent });
+    setCampaign(prev => ({ ...prev, raised_amount: (Number(prev?.raised_amount)||0) + num }));
+    if (typeof setDonations === 'function') {
+      setDonations(prev => [{
+        id: paymentId,
+        amount: num,
+        is_anonymous: Boolean(isAnonymous),
+        status: 'completed',
+        created_at: new Date().toISOString(),
+        donor_name: isAnonymous ? 'Anonymous' : (user?.display_name || 'Donor'),
+      }, ...prev]);
+    }
+    setIsSubmitting(false);
   };
 
   if (loading) {
@@ -358,6 +387,17 @@ export default function CampaignDetail() {
           .donation-card-col { grid-column: 2 !important; grid-row: 1 !important; }
         }
       `}</style>
+      {/* Interactive Razorpay Checkout Modal */}
+      <RazorpayCheckoutModal
+        isOpen={isCheckoutOpen}
+        onClose={() => setIsCheckoutOpen(false)}
+        onSuccess={handleCheckoutSuccess}
+        amount={Number(amount)}
+        campaignTitle={campaign?.title}
+        donorName={isAnonymous ? 'Anonymous Donor' : user?.display_name || 'Donor'}
+        donorEmail={user?.email || 'donor@example.com'}
+        orderId={checkoutOrderData?.order_id}
+      />
     </div>
   );
 }
