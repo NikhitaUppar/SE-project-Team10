@@ -37,6 +37,17 @@ async function startCampaignUpdatesPostgrest(db) {
       return respond(req, res, rows);
     } catch { return res.status(500).json({ code: 'TEST_ERROR' }); }
   });
+  app.get('/rest/v1/donations', async (req, res) => {
+    try {
+      const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 20));
+      const { rows } = await query(`SELECT d.id, d.amount, d.is_anonymous, d.status, d.created_at,
+        json_build_object('display_name', u.display_name) AS users
+        FROM public.donations d LEFT JOIN public.users u ON u.id = d.donor_id
+        WHERE d.campaign_id = $1 AND d.status = $2 ORDER BY d.created_at DESC LIMIT $3`,
+      [req.query.campaign_id.slice(3), req.query.status.slice(3), limit]);
+      return respond(req, res, rows);
+    } catch { return res.status(500).json({ code: 'TEST_ERROR' }); }
+  });
   app.get('/rest/v1/campaign_updates', async (req, res) => {
     try {
       const { rows } = await query('SELECT id, campaign_id, content, created_at FROM public.campaign_updates WHERE campaign_id = $1' + order(req.query.order, ['created_at', 'id']), [req.query.campaign_id.slice(3)]);
