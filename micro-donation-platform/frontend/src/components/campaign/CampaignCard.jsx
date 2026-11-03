@@ -24,6 +24,7 @@ export default function CampaignCard({ campaign }) {
       : goal > 0 ? Math.round((raised / goal) * 100) : 0
   );
 
+  const canDonate = campaign?.accepting_donations === true;
   const daysLeftText = getRemainingDaysText(campaign);
   const imageUrl = !imgError && (campaign?.image_url || campaign?.campaign_files?.[0]?.file_url);
   const catColor = CATEGORY_COLORS[campaign?.category] || { bg: '#FFF7ED', text: '#92400E', dot: '#EA580C' };
@@ -153,7 +154,7 @@ export default function CampaignCard({ campaign }) {
               padding: '9px 0', borderRadius: 8,
               boxShadow: '0 2px 8px rgba(194,65,12,0.25)',
             }}>
-              Donate Now
+              {canDonate ? 'Donate Now' : 'View Campaign'}
             </Link>
             <ShareButton campaign={campaign} variant="icon" />
           </div>
