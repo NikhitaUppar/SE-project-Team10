@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
+import CampaignUpdates from '../components/campaign/CampaignUpdates';
 import ShareButton from '../components/campaign/ShareButton';
 import RazorpayCheckoutModal from '../components/campaign/RazorpayCheckoutModal';
 import { getRemainingDaysText } from '../utils/dateUtils';
@@ -18,6 +19,7 @@ export default function CampaignDetail() {
 
   const [campaign, setCampaign]         = useState(null);
   const [loading, setLoading]           = useState(true);
+  const [campaignError, setCampaignError] = useState('');
   const [donations, setDonations]       = useState([]);
   const [donationsLoading, setDonationsLoading] = useState(true);
   const [donationsError, setDonationsError]     = useState('');
@@ -30,14 +32,24 @@ export default function CampaignDetail() {
   const [checkoutOrderData, setCheckoutOrderData] = useState(null);
 
   useEffect(() => {
-    (async () => {
+    const controller = new AbortController();
+    setLoading(true);
+    setCampaign(null);
+    setCampaignError('');
+    const fetchCampaign = async () => {
       try {
-        const res = await api.get(`/campaigns/${id}`);
-        setCampaign(res.data);
-      } catch {
-        setCampaign({ id, title:'Emergency Medical Relief & Care', description:'Providing essential micro-aid and urgent medical treatment to underprivileged communities in need.', category:'Healthcare', goal_amount:50000, raised_amount:14250, status:'active', deadline:new Date(Date.now()+86400000*14).toISOString() });
-      } finally { setLoading(false); }
-    })();
+        const res = await api.get(`/campaigns/${id}`, { signal: controller.signal });
+        if (!controller.signal.aborted) setCampaign(res.data);
+      } catch (err) {
+        if (!controller.signal.aborted) setCampaignError(err.response?.status === 404
+          ? 'Campaign not found.' : 'Unable to load this campaign. Please try again.');
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    };
+
+    fetchCampaign();
+    return () => controller.abort();
   }, [id]);
 
   useEffect(() => {
@@ -126,6 +138,13 @@ export default function CampaignDetail() {
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       </div>
     );
+  }
+
+  if (campaignError || !campaign) {
+    return <div className="max-w-4xl mx-auto py-8 px-4">
+      <p role="alert" className="text-rose-700">{campaignError || 'Campaign not found.'}</p>
+      <Link to="/campaigns" className="mt-4 inline-block text-indigo-600 hover:underline">Browse campaigns</Link>
+    </div>;
   }
 
   const progressPercent = Math.min(100, Math.round(((campaign?.raised_amount||0)/(campaign?.goal_amount||1))*100));
@@ -246,6 +265,8 @@ export default function CampaignDetail() {
               <span style={{ color: isUrgent?'#B91C1C':'#A16207', fontWeight: isUrgent?700:400 }}>⏱ {daysLeftText}</span>
             </div>
           </div>
+
+          <CampaignUpdates key={campaign.id} campaign={campaign} />
 
           {/* Recent donations */}
           <div style={{ background:'#fff', border:'1.5px solid #FED7AA', borderRadius:18, padding:'24px 28px', boxShadow:'0 2px 12px rgba(194,65,12,0.05)' }}>

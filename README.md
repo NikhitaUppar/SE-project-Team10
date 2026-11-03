@@ -32,6 +32,9 @@
 
 ---
 
+Campaign progress updates (issue #12), API rules, and test instructions are in
+[the progress updates guide](micro-donation-platform/backend/ISSUE_12_PROGRESS_UPDATES.md).
+
 ## Project Overview
 
 The **Micro Donation Platform** is a web-based crowdfunding and philanthropic platform engineered specifically for **micro-giving (₹1 to ₹500)**. It enables students, working professionals, and everyday citizens to contribute small, affordable amounts to vetted social initiatives, medical emergencies, animal rescue operations, and educational causes.
