@@ -9,16 +9,13 @@ import { getRemainingDaysText } from '../utils/dateUtils';
 
 const PRESET_AMOUNTS = [50, 100, 250, 500];
 
-// Default development token for seamless local demo and testing
-const DEV_TEST_TOKEN =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjExMTExMTExLTExMTEtMTExMS0xMTExLTExMTExMTExMTExMSIsImVtYWlsIjoiZG9ub3JAZXhhbXBsZS5jb20iLCJyb2xlIjoiZG9ub3IiLCJpYXQiOjE3OTM2MjI4MjksImV4cCI6MTgyNTE1ODgyOSwiYXV0aF92ZXJzaW9uIjowfQ.io7Wus-ujVsADzWvPZrpkgNKOzAwUE4x529ORfPGDtI';
-
 export default function CampaignDetail() {
   const { id } = useParams();
   const { user } = useAuth();
 
   const [campaign, setCampaign] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [campaignError, setCampaignError] = useState('');
   const [donations, setDonations] = useState([]);
   const [donationsLoading, setDonationsLoading] = useState(true);
   const [donationsError, setDonationsError] = useState('');
@@ -31,43 +28,66 @@ export default function CampaignDetail() {
   const [checkoutOrderData, setCheckoutOrderData] = useState(null);
 
   useEffect(() => {
-    (async () => {
+    const controller = new AbortController();
+
+    setLoading(true);
+    setCampaign(null);
+    setCampaignError('');
+
+    const fetchCampaign = async () => {
       try {
-        const res = await api.get(`/campaigns/${id}`);
-        setCampaign(res.data);
-      } catch {
-        setCampaign({
-          id,
-          title: 'Emergency Medical Relief & Care',
-          description: 'Providing essential micro-aid and urgent medical treatment to underprivileged communities in need.',
-          category: 'Healthcare',
-          goal_amount: 50000,
-          raised_amount: 14250,
-          status: 'active',
-          deadline: new Date(Date.now() + 86400000 * 14).toISOString()
+        const res = await api.get(`/campaigns/${id}`, {
+          signal: controller.signal,
         });
+
+        if (!controller.signal.aborted) {
+          setCampaign(res.data);
+        }
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          setCampaignError(
+            err.response?.status === 404
+              ? 'Campaign not found.'
+              : 'Unable to load this campaign. Please try again.'
+          );
+        }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
-    })();
+    };
+
+    fetchCampaign();
+
+    return () => controller.abort();
   }, [id]);
 
   useEffect(() => {
     let active = true;
 
+    setDonationsLoading(true);
+    setDonationsError('');
+    setDonations([]);
+
     (async () => {
       try {
         const res = await api.get(`/campaigns/${id}/donations`);
+
         if (active) {
           setDonations(res.data.donations || []);
-          setDonationsError('');
         }
       } catch (err) {
         if (active) {
-          setDonationsError(err.response?.data?.error || 'Could not load recent donations.');
+          setDonationsError(
+            err.response?.data?.error ||
+            'Could not load recent donations.'
+          );
         }
       } finally {
-        if (active) setDonationsLoading(false);
+        if (active) {
+          setDonationsLoading(false);
+        }
       }
     })();
 
@@ -96,7 +116,7 @@ export default function CampaignDetail() {
         is_anonymous: isAnonymous,
       });
 
-      const { order_id, amount: orderAmount, currency, key_id } = res.data;
+      const { order_id, currency, key_id } = res.data;
 
       setCheckoutOrderData({
         order_id,
@@ -106,9 +126,13 @@ export default function CampaignDetail() {
       });
 
       setIsCheckoutOpen(true);
-      setIsSubmitting(false);
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Failed to initialize payment.');
+      setError(
+        err.response?.data?.error ||
+        err.message ||
+        'Failed to initialize payment.'
+      );
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -116,36 +140,57 @@ export default function CampaignDetail() {
   const handleCheckoutSuccess = async (response) => {
     setIsCheckoutOpen(false);
     setIsSubmitting(true);
+
     const num = Number(amount);
-    const paymentId = response.razorpay_payment_id || `pay_mock_${Date.now()}`;
-    const orderId = response.razorpay_order_id || checkoutOrderData?.order_id;
-    const signature = response.razorpay_signature || 'dev_test_sig';
+    const paymentId = response.razorpay_payment_id;
+    const orderId =
+      response.razorpay_order_id || checkoutOrderData?.order_id;
+    const signature = response.razorpay_signature;
 
     let receiptSent = false;
+
     try {
-      const v = await api.post('/donations/verify', {
+      const verification = await api.post('/donations/verify', {
         razorpay_order_id: orderId,
         razorpay_payment_id: paymentId,
         razorpay_signature: signature,
       });
-      receiptSent = v.data?.receipt_sent;
-    } catch (vErr) {
-      console.warn('Payment verification callback notice:', vErr.message);
-    }
 
-    setPaymentSuccess({ paymentId, orderId, amount: num, receiptSent });
-    setCampaign(prev => ({ ...prev, raised_amount: (Number(prev?.raised_amount)||0) + num }));
-    if (typeof setDonations === 'function') {
-      setDonations(prev => [{
-        id: paymentId,
+      receiptSent = Boolean(verification.data?.receipt_sent);
+
+      setPaymentSuccess({
+        paymentId,
+        orderId,
         amount: num,
-        is_anonymous: Boolean(isAnonymous),
-        status: 'completed',
-        created_at: new Date().toISOString(),
-        donor_name: isAnonymous ? 'Anonymous' : (user?.display_name || 'Donor'),
-      }, ...prev]);
+        receiptSent,
+      });
+
+      setCampaign((prev) => ({
+        ...prev,
+        raised_amount: (Number(prev?.raised_amount) || 0) + num,
+      }));
+
+      setDonations((prev) => [
+        {
+          id: paymentId,
+          amount: num,
+          is_anonymous: Boolean(isAnonymous),
+          status: 'completed',
+          created_at: new Date().toISOString(),
+          donor_name: isAnonymous
+            ? 'Anonymous'
+            : user?.display_name || 'Donor',
+        },
+        ...prev,
+      ]);
+    } catch (err) {
+      console.error('Payment verification failed:', err);
+      setError(
+        'Payment verification could not be completed. Please contact support before retrying.'
+      );
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   if (loading) {
@@ -176,33 +221,53 @@ export default function CampaignDetail() {
     );
   }
 
+  if (campaignError || !campaign) {
+    return (
+      <div className="max-w-4xl mx-auto py-8 px-4">
+        <p role="alert" className="text-rose-700">
+          {campaignError || 'Campaign not found.'}
+        </p>
+
+        <Link
+          to="/campaigns"
+          className="mt-4 inline-block text-indigo-600 hover:underline"
+        >
+          Browse campaigns
+        </Link>
+      </div>
+    );
+  }
+
   const progressPercent = Math.min(
     100,
-    Math.round(((campaign?.raised_amount || 0) / (campaign?.goal_amount || 1)) * 100)
+    Math.round(
+      ((Number(campaign.raised_amount) || 0) /
+        (Number(campaign.goal_amount) || 1)) * 100
+    )
   );
 
   const daysLeftText = getRemainingDaysText(campaign);
 
   const daysLeftNum = (() => {
     if (daysLeftText === 'Ends today') return 0;
-    const m = daysLeftText.match(/^(\d+) day/);
-    return m ? parseInt(m[1], 10) : null;
+    const match = daysLeftText.match(/^(\d+) day/);
+    return match ? parseInt(match[1], 10) : null;
   })();
 
   const isUrgent = daysLeftNum !== null && daysLeftNum < 7;
 
-  const impactStatements = Array.isArray(campaign?.impact_statements)
+  const impactStatements = Array.isArray(campaign.impact_statements)
     ? campaign.impact_statements.filter(Boolean)
     : [];
 
-  const isVerified = Boolean(campaign?.is_verified);
+  const isVerified = Boolean(campaign.is_verified);
 
-  const docFile = campaign?.campaign_files?.find(
-    f => f.file_type === 'application/pdf'
+  const docFile = campaign.campaign_files?.find(
+    (file) => file.file_type === 'application/pdf'
   );
 
-  const imgFile = campaign?.campaign_files?.find(
-    f => f.file_type?.startsWith('image/')
+  const imgFile = campaign.campaign_files?.find(
+    (file) => file.file_type?.startsWith('image/')
   );
 
   const supportingDocUrl = docFile?.file_url || null;
@@ -265,7 +330,7 @@ export default function CampaignDetail() {
                 textTransform: 'uppercase',
                 letterSpacing: '0.06em'
               }}>
-                {campaign?.category || 'General'}
+                {campaign.category || 'General'}
               </span>
 
               <span style={{
@@ -273,14 +338,13 @@ export default function CampaignDetail() {
                 fontWeight: 700,
                 padding: '4px 12px',
                 borderRadius: 999,
-                background: campaign?.status === 'active' ? '#F0FDF4' : '#F3F4F6',
-                color: campaign?.status === 'active' ? '#14532D' : '#6B7280',
-                border: `1px solid ${campaign?.status === 'active' ? '#BBF7D0' : '#E5E7EB'}`
+                background: campaign.status === 'active' ? '#F0FDF4' : '#F3F4F6',
+                color: campaign.status === 'active' ? '#14532D' : '#6B7280',
+                border: `1px solid ${campaign.status === 'active' ? '#BBF7D0' : '#E5E7EB'}`
               }}>
-                {campaign?.status === 'active' ? '● Active' : 'Closed'}
+                {campaign.status === 'active' ? '● Active' : 'Closed'}
               </span>
 
-              {/* Green Verified badge */}
               {isVerified && (
                 <span style={{
                   background: '#F0FDF4',
@@ -327,7 +391,7 @@ export default function CampaignDetail() {
               margin: '0 0 14px',
               lineHeight: 1.3
             }}>
-              {campaign?.title}
+              {campaign.title}
             </h1>
 
             <p style={{
@@ -337,7 +401,7 @@ export default function CampaignDetail() {
               margin: 0,
               whiteSpace: 'pre-line'
             }}>
-              {campaign?.description}
+              {campaign.description}
             </p>
 
             {(thumbnailUrl || supportingDocUrl) && (
@@ -474,7 +538,7 @@ export default function CampaignDetail() {
                   color: '#C2410C',
                   fontVariantNumeric: 'tabular-nums'
                 }}>
-                  ₹{(Number(campaign?.raised_amount) || 0).toLocaleString('en-IN')}
+                  ₹{(Number(campaign.raised_amount) || 0).toLocaleString('en-IN')}
                 </span>
 
                 <span style={{
@@ -491,7 +555,7 @@ export default function CampaignDetail() {
                 fontSize: '0.875rem',
                 fontWeight: 600
               }}>
-                Goal: ₹{(Number(campaign?.goal_amount) || 0).toLocaleString('en-IN')}
+                Goal: ₹{(Number(campaign.goal_amount) || 0).toLocaleString('en-IN')}
               </span>
             </div>
 
@@ -535,6 +599,7 @@ export default function CampaignDetail() {
             </div>
           </div>
 
+
           <div style={{
             background: '#fff',
             border: '1.5px solid #FED7AA',
@@ -552,7 +617,9 @@ export default function CampaignDetail() {
             </h2>
 
             {donationsLoading && (
-              <p style={{ color: '#A16207', fontSize: '0.875rem' }}>Loading…</p>
+              <p style={{ color: '#A16207', fontSize: '0.875rem' }}>
+                Loading…
+              </p>
             )}
 
             {!donationsLoading && donationsError && (
@@ -583,7 +650,9 @@ export default function CampaignDetail() {
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '10px 0',
-                    borderBottom: i < donations.length - 1 ? '1px solid #FEF3C7' : 'none'
+                    borderBottom: i < donations.length - 1
+                      ? '1px solid #FEF3C7'
+                      : 'none'
                   }}>
                     <div style={{
                       display: 'flex',
@@ -709,8 +778,11 @@ export default function CampaignDetail() {
                     gap: 8
                   }}>
                     <span style={{ color: '#A16207' }}>Receipt:</span>
-                    <span style={{ color: '#14532D', fontWeight: 700 }}>
-                      ✅ Emailed
+                    <span style={{
+                      color: '#14532D',
+                      fontWeight: 700
+                    }}>
+                      {paymentSuccess.receiptSent ? '✅ Emailed' : 'Pending'}
                     </span>
                   </div>
                 </div>
@@ -781,7 +853,7 @@ export default function CampaignDetail() {
                     gap: 8,
                     marginBottom: 12
                   }}>
-                    {PRESET_AMOUNTS.map(p => (
+                    {PRESET_AMOUNTS.map((p) => (
                       <button
                         key={p}
                         type="button"
@@ -830,7 +902,7 @@ export default function CampaignDetail() {
                       min="1"
                       max="500"
                       value={amount}
-                      onChange={e => setAmount(Number(e.target.value))}
+                      onChange={(e) => setAmount(Number(e.target.value))}
                       required
                       placeholder="Custom amount"
                       style={{
@@ -848,8 +920,8 @@ export default function CampaignDetail() {
                         boxSizing: 'border-box',
                         fontFamily: 'inherit'
                       }}
-                      onFocus={e => e.target.style.borderColor = '#EA580C'}
-                      onBlur={e => e.target.style.borderColor = '#FED7AA'}
+                      onFocus={(e) => e.target.style.borderColor = '#EA580C'}
+                      onBlur={(e) => e.target.style.borderColor = '#FED7AA'}
                     />
                   </div>
 
@@ -864,7 +936,7 @@ export default function CampaignDetail() {
                       type="checkbox"
                       id="isAnonymous"
                       checked={isAnonymous}
-                      onChange={e => setIsAnonymous(e.target.checked)}
+                      onChange={(e) => setIsAnonymous(e.target.checked)}
                       style={{
                         width: 16,
                         height: 16,
@@ -944,13 +1016,13 @@ export default function CampaignDetail() {
           .donation-card-col { grid-column: 2 !important; grid-row: 1 !important; }
         }
       `}</style>
-      {/* Interactive Razorpay Checkout Modal */}
+
       <RazorpayCheckoutModal
         isOpen={isCheckoutOpen}
         onClose={() => setIsCheckoutOpen(false)}
         onSuccess={handleCheckoutSuccess}
         amount={Number(amount)}
-        campaignTitle={campaign?.title}
+        campaignTitle={campaign.title}
         donorName={isAnonymous ? 'Anonymous Donor' : user?.display_name || 'Donor'}
         donorEmail={user?.email || 'donor@example.com'}
         orderId={checkoutOrderData?.order_id}
