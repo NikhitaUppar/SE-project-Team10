@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import CampaignDonors from '../components/campaign/CampaignDonors';
+import CampaignUpdates from '../components/campaign/CampaignUpdates';
 import ShareButton from '../components/campaign/ShareButton';
 import RazorpayCheckoutModal from '../components/campaign/RazorpayCheckoutModal';
 import { getRemainingDaysText } from '../utils/dateUtils';
@@ -20,6 +21,7 @@ export default function CampaignDetail() {
   const [campaign, setCampaign]         = useState(null);
   const [loading, setLoading]           = useState(true);
   const [donorRefresh, setDonorRefresh] = useState(0);
+  const [campaignError, setCampaignError] = useState('');
   const [amount, setAmount]             = useState(100);
   const [isAnonymous, setIsAnonymous]   = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -29,14 +31,24 @@ export default function CampaignDetail() {
   const [checkoutOrderData, setCheckoutOrderData] = useState(null);
 
   useEffect(() => {
-    (async () => {
+    const controller = new AbortController();
+    setLoading(true);
+    setCampaign(null);
+    setCampaignError('');
+    const fetchCampaign = async () => {
       try {
-        const res = await api.get(`/campaigns/${id}`);
-        setCampaign(res.data);
-      } catch {
-        setCampaign({ id, title:'Emergency Medical Relief & Care', description:'Providing essential micro-aid and urgent medical treatment to underprivileged communities in need.', category:'Healthcare', goal_amount:50000, raised_amount:14250, status:'active', deadline:new Date(Date.now()+86400000*14).toISOString() });
-      } finally { setLoading(false); }
-    })();
+        const res = await api.get(`/campaigns/${id}`, { signal: controller.signal });
+        if (!controller.signal.aborted) setCampaign(res.data);
+      } catch (err) {
+        if (!controller.signal.aborted) setCampaignError(err.response?.status === 404
+          ? 'Campaign not found.' : 'Unable to load this campaign. Please try again.');
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    };
+
+    fetchCampaign();
+    return () => controller.abort();
   }, [id]);
 
   const handleDonate = async (e) => {
@@ -103,6 +115,13 @@ export default function CampaignDetail() {
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       </div>
     );
+  }
+
+  if (campaignError || !campaign) {
+    return <div className="max-w-4xl mx-auto py-8 px-4">
+      <p role="alert" className="text-rose-700">{campaignError || 'Campaign not found.'}</p>
+      <Link to="/campaigns" className="mt-4 inline-block text-indigo-600 hover:underline">Browse campaigns</Link>
+    </div>;
   }
 
   const progressPercent = Math.min(100, Math.round(((campaign?.raised_amount||0)/(campaign?.goal_amount||1))*100));
@@ -224,6 +243,7 @@ export default function CampaignDetail() {
             </div>
           </div>
 
+          <CampaignUpdates key={campaign.id} campaign={campaign} />
           <CampaignDonors key={id} campaignId={id} refreshKey={donorRefresh} />
         </div>
 

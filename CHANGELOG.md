@@ -1,5 +1,16 @@
 # Project change record
 
+## 2026-11-03: PR #53 conflict resolution
+
+- Integrated main `8816d6d`, including merged progress updates, video support,
+  and campaign-start navigation, into the existing issue #36 PR branch.
+- Resolved the four conflicting files while keeping both progress and donors
+  sections, both guide links, new upload/navigation changes, and existing checkout.
+- Frontend build and combined-page browser checks passed. Full backend: 235
+  passed / 12 inherited login failures, with no auth or payment-controller change.
+- Updated browser fixtures/selectors for the combined timeline and donor lists.
+  No shared database writes or private environment changes.
+
 ## 2026-11-02: Issue #36 campaign donor leaderboard
 
 - Updated main at `d9c48d1` and created `feature/36-donor-leaderboard`.
@@ -14,6 +25,57 @@
   tests. The feature guide records those inherited failures.
 - No migration, new dependency, private environment change, shared write, real
   payment, or email. User approval is required before push/PR creation.
+
+## 2026-11-02: PR #39 conflict resolution
+
+- Integrated main at `e1d4ab4` into the issue #12 feature branch and resolved
+  conflicts in README, campaign routes, and the campaign detail page.
+- Preserved sharing/countdown, impact information, recent supporters, and owner
+  stats alongside the progress timeline and role-protected owner posting.
+- Passed 230 backend tests and the frontend build. Updated the isolated browser
+  fixture to exercise newer campaign detail features alongside progress updates.
+- No shared database writes or environment changes; PR title and issue remain
+  **[CAMPAIGN] Campaign owner posts progress update (FR-09)** and **#12**.
+- Before publishing, integrated newer main `d9c48d1` without conflicts. Frontend
+  build and progress-update browser/integration checks passed. Full backend run:
+  218 passed, 12 login-test failures from the authentication shortcut inherited
+  unchanged from main. Recorded the regression in the feature guide/PR.
+
+## 2026-10-26: Issue #12 campaign progress updates
+
+- Safely fetched teammate changes, fast-forwarded local main to `509d358`,
+  verified authentication and campaign dependencies were merged, and created
+  `feature/12-campaign-progress-updates` before editing code.
+- Implemented owner-only `POST /api/campaigns/:id/updates` and public
+  `GET /api/campaigns/:id/updates` with validation, role/ownership and active-status
+  checks, safe failures, and chronological ordering with an ID tie-break.
+- Reused the existing Supabase `campaign_updates` table and database defaults;
+  a read-only shared schema check succeeded. No migration, shared database write,
+  environment change, or additional project dependency was needed.
+- Added a campaign progress timeline and owner form with loading, errors,
+  retry, safe text display, and immediate display of saved updates. Replaced
+  the detail page's fabricated demo fallback with a real error state.
+- Added isolated PostgreSQL/real JWT/Supabase-client integration scenarios and
+  optional Chrome checks. Existing auth, donations, and issue #13 were untouched.
+- Validation passed: 14 suites / 183 Jest tests, the 24 child integration
+  scenarios, frontend production build, and isolated browser checks. The latter
+  cover posting, reader roles, refresh/persistence, XSS, API failure/retry,
+  timestamps/order, inactive/missing campaigns, browsing, and the progress
+  section at 390px. No repository lint command is configured.
+- Re-fetched before final review; origin/main remained `509d358` and was already
+  included in this branch. See `backend/ISSUE_12_PROGRESS_UPDATES.md` under
+  `micro-donation-platform` for the complete file review and prepared PR text.
+- User confirmation is required before any push or PR creation for this issue.
+- Follow-up: the user approved a temporary shared-database owner/campaign for
+  manual local-app testing and confirmed the owner UI worked. The temporary
+  account and campaign were removed afterward, and no test updates remained.
+  Existing records were preserved. The user then approved pushing this branch
+  and creating the issue #12 PR; automatic merge remains unauthorized.
+- Pushed the approved branch and created
+  [PR #39](https://github.com/NikhitaUppar/SE-project-Team10/pull/39),
+  **[CAMPAIGN] Implement Campaign Progress Updates (FR-09)**, targeting `main`
+  with `Closes #12`, the complete file list, and validation results. It is open
+  for review and has not been merged.
 
 ## Replacement pull requests created on 2026-10-24
 

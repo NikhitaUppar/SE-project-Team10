@@ -9,6 +9,7 @@ async function run() {
   let stage = 'setup';
   try {
     f = await createFixture(); await f.seed();
+    await f.db.query('INSERT INTO public.campaign_updates (campaign_id,content) VALUES ($1,$2)', [f.ids.campaign, 'Owner progress remains visible alongside the leaderboard.']);
     const now = Date.now();
     for (let i = 0; i < 7; i++) await f.add({ donor: i, amount: 100 + i * 10, anonymous: i === 6, time: new Date(now - (i + 1) * 60000).toISOString() });
     await f.add({ donor: 0, amount: 200, time: new Date(now - 2 * 3600000).toISOString() });
@@ -52,10 +53,11 @@ async function run() {
     console.log('PASS: loading, top five aggregated ranks, INR, latest five, relative times, anonymity, and escaped text');
 
     stage = 'existing campaign features';
+    await page.getByText('Owner progress remains visible alongside the leaderboard.', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Share campaign' }).waitFor();
     await page.locator('form button[type="submit"]').waitFor();
     assert.equal(donorRequests, 1, 'One supporters request replaces the old duplicate history request');
-    console.log('PASS: sharing, campaign details, and donation controls preserved');
+    console.log('PASS: progress timeline, sharing, campaign details, and donation controls preserved');
 
     stage = 'mobile';
     await page.setViewportSize({ width: 390, height: 844 });

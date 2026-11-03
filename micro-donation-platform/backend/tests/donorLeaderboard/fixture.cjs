@@ -27,6 +27,12 @@ async function createFixture() {
       return res.json(rows);
     } catch { res.status(500).json({ message: 'private database details' }); }
   });
+  rest.get('/rest/v1/campaign_updates', async (req, res) => {
+    try {
+      const { rows } = await db.query('SELECT id,campaign_id,content,created_at FROM public.campaign_updates WHERE campaign_id=$1 ORDER BY created_at ASC,id ASC', [req.query.campaign_id.slice(3)]);
+      return res.json(rows);
+    } catch { res.status(500).json({ message: 'private database details' }); }
+  });
   const server = await new Promise(resolve => { const s = rest.listen(0, '127.0.0.1', () => resolve(s)); });
   Object.assign(process.env, { SUPABASE_URL: `http://127.0.0.1:${server.address().port}`, SUPABASE_SERVICE_KEY: 'leaderboard-local-test-key',
     JWT_SECRET: 'leaderboard-local-test-secret', NODE_ENV: 'test', RAZORPAY_KEY_ID: 'rzp_test_placeholder', RAZORPAY_KEY_SECRET: 'test-only-secret' });

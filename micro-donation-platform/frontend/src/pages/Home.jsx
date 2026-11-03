@@ -340,7 +340,7 @@ export default function Home() {
           ) : (
             <div style={{ textAlign: 'center', padding: '48px 0', color: '#92400E' }}>
               <div style={{ fontSize: '2.5rem', marginBottom: 16 }}>🌱</div>
-              <p style={{ fontWeight: 600 }}>No campaigns yet. <Link to="/campaigns/create" style={{ color: '#EA580C' }}>Start the first one!</Link></p>
+              <p style={{ fontWeight: 600 }}>No campaigns yet. <Link to="/campaigns/new" style={{ color: '#EA580C' }}>Start the first one!</Link></p>
             </div>
           )}
         </div>

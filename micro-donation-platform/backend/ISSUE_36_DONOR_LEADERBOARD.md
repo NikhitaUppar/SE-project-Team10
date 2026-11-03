@@ -5,8 +5,9 @@ Issue: https://github.com/NikhitaUppar/SE-project-Team10/issues/36
 Branch: `feature/36-donor-leaderboard`, created from updated main `d9c48d1`.
 Before editing: checked status/branches, fetched with prune, fast-forwarded main
 with `git pull --ff-only origin main`, and preserved the issue #12/#13 branches.
-PR #39 and PR #52 are open and unmerged. Neither is required for this independent
-feature; no code from those branches was copied or reimplemented.
+At initial implementation, PR #39 and PR #52 were open and unmerged. PR #39
+has since merged into main and is preserved by the 2026-11-03 integration below.
+Issue #13 remains separate; neither feature was reimplemented here.
 
 ## Acceptance criteria
 
@@ -96,7 +97,8 @@ records. It does not invent a donor entry from checkout input. Checkout/payment
 verification logic, authentication, raised-total behavior, sharing, countdown,
 impact information, documents, and the existing campaign layout remain outside
 this issue's changes. The legacy /donations endpoint is preserved for consumers.
-The feature does not implement the separately unmerged progress/expiry features.
+The feature preserves merged progress updates and does not implement the separate
+expiry feature.
 
 ## Changed files
 
@@ -115,6 +117,7 @@ Paths relative to micro-donation-platform, except the two root documents.
 | backend/tests/donorLeaderboard/fixture.cjs | Isolated PostgreSQL, Supabase REST adapter, real production routes, and local test data. |
 | backend/tests/donorLeaderboard/flow.cjs | Actual SQL/API tests, statuses, privacy, empty/missing IDs, duplicate records, failures, and 1005 rows. |
 | backend/tests/donorLeaderboard/display.cjs | Real frontend date/INR utility tests with a fixed clock and malformed/future dates. |
+| backend/tests/campaignUpdates/browser.cjs | Scopes existing progress walkthrough checks to the new Recent Donations section. |
 | backend/tests/donorLeaderboard/browser.cjs | Isolated Chrome tests for the real React UI, states/retry, anonymity, long names/mobile, and existing controls. |
 | backend/ISSUE_36_DONOR_LEADERBOARD.md | Requirements, rules, file review, validation, and prepared PR description. |
 | Root README.md | Link to this feature guide. |
@@ -169,3 +172,30 @@ unchanged main login suite. No full-green claim is made.
 Branch: feature/36-donor-leaderboard; base: main. Commit message:
 `feat(ui): add donor leaderboard to campaign page (#36)`.
 Ask the user before pushing or creating this PR. Never merge automatically.
+
+
+## 2026-11-03: resolve PR #53 conflicts with updated main
+
+Integrated main `8816d6d` into this branch after fetching a clean worktree. PR #39
+is now merged into main, along with campaign-start navigation and video uploads.
+Resolved overlapping README/change-record additions, campaign route imports, and
+campaign detail state/component sections. Preserved the real campaign error state,
+request cancellation, CampaignUpdates timeline and posting form, the leaderboard,
+new start links, upload changes, sharing/countdown, and checkout controls.
+
+The former Recent Supporters block stays replaced by Top Donors/Recent Donations;
+there is no duplicate history request. Both feature guide links and both histories
+are retained. This follow-up makes no authentication or payment-controller change.
+
+Validation: **235 backend tests passed / 12 failed**, **19 suites passed / 1 failed**.
+All failures are the unchanged inherited login tests. Frontend build passed. The
+leaderboard Chrome checks passed with an added assertion that the progress
+section remains visible. Progress-update browser selectors are scoped to the new
+recent-donations list so duplicate visible donor names do not produce false
+strict-selector failures. Both browser walkthroughs passed, including owner posting, chronology, reload
+persistence, validation/errors, reader roles, inactive/missing campaigns, and
+mobile layout. All browser fixtures use isolated PostgreSQL.
+
+Modified follow-up files: README.md, CHANGELOG.md, backend campaign routes,
+frontend CampaignDetail.jsx, this guide, leaderboard browser/fixture files, and
+campaignUpdates/browser.cjs. No .env changes or shared database writes.
