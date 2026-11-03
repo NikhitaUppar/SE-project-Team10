@@ -27,6 +27,7 @@ export default function CampaignDetail() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [checkoutOrderData, setCheckoutOrderData] = useState(null);
 
+  // Fetch campaign details
   useEffect(() => {
     const controller = new AbortController();
 
@@ -63,6 +64,7 @@ export default function CampaignDetail() {
     return () => controller.abort();
   }, [id]);
 
+  // Fetch recent donations
   useEffect(() => {
     let active = true;
 
@@ -70,7 +72,7 @@ export default function CampaignDetail() {
     setDonationsError('');
     setDonations([]);
 
-    (async () => {
+    const fetchDonations = async () => {
       try {
         const res = await api.get(`/campaigns/${id}/donations`);
 
@@ -89,13 +91,16 @@ export default function CampaignDetail() {
           setDonationsLoading(false);
         }
       }
-    })();
+    };
+
+    fetchDonations();
 
     return () => {
       active = false;
     };
   }, [id]);
 
+  // Start donation payment
   const handleDonate = async (e) => {
     e.preventDefault();
     setError('');
@@ -137,6 +142,7 @@ export default function CampaignDetail() {
     }
   };
 
+  // Verify successful Razorpay payment
   const handleCheckoutSuccess = async (response) => {
     setIsCheckoutOpen(false);
     setIsSubmitting(true);
@@ -147,8 +153,6 @@ export default function CampaignDetail() {
       response.razorpay_order_id || checkoutOrderData?.order_id;
     const signature = response.razorpay_signature;
 
-    let receiptSent = false;
-
     try {
       const verification = await api.post('/donations/verify', {
         razorpay_order_id: orderId,
@@ -156,7 +160,7 @@ export default function CampaignDetail() {
         razorpay_signature: signature,
       });
 
-      receiptSent = Boolean(verification.data?.receipt_sent);
+      const receiptSent = Boolean(verification.data?.receipt_sent);
 
       setPaymentSuccess({
         paymentId,
@@ -185,6 +189,7 @@ export default function CampaignDetail() {
       ]);
     } catch (err) {
       console.error('Payment verification failed:', err);
+
       setError(
         'Payment verification could not be completed. Please contact support before retrying.'
       );
@@ -193,24 +198,29 @@ export default function CampaignDetail() {
     }
   };
 
+  // Campaign loading screen
   if (loading) {
     return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '60vh',
-        flexDirection: 'column',
-        gap: 12
-      }}>
-        <div style={{
-          width: 40,
-          height: 40,
-          border: '3px solid #FED7AA',
-          borderTop: '3px solid #EA580C',
-          borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite'
-        }} />
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '60vh',
+          flexDirection: 'column',
+          gap: 12,
+        }}
+      >
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            border: '3px solid #FED7AA',
+            borderTop: '3px solid #EA580C',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+          }}
+        />
 
         <p style={{ color: '#A16207', fontSize: '0.9rem' }}>
           Loading campaign…
@@ -221,6 +231,7 @@ export default function CampaignDetail() {
     );
   }
 
+  // Campaign error screen
   if (campaignError || !campaign) {
     return (
       <div className="max-w-4xl mx-auto py-8 px-4">
@@ -250,6 +261,7 @@ export default function CampaignDetail() {
 
   const daysLeftNum = (() => {
     if (daysLeftText === 'Ends today') return 0;
+
     const match = daysLeftText.match(/^(\d+) day/);
     return match ? parseInt(match[1], 10) : null;
   })();
@@ -274,11 +286,13 @@ export default function CampaignDetail() {
   const thumbnailUrl = imgFile?.file_url || null;
 
   return (
-    <div style={{
-      maxWidth: 1080,
-      margin: '0 auto',
-      padding: '24px max(16px, env(safe-area-inset-left, 0px)) 64px'
-    }}>
+    <div
+      style={{
+        maxWidth: 1080,
+        margin: '0 auto',
+        padding: '24px max(16px, env(safe-area-inset-left, 0px)) 64px',
+      }}
+    >
       <Link
         to="/campaigns"
         style={{
@@ -289,7 +303,7 @@ export default function CampaignDetail() {
           display: 'inline-flex',
           alignItems: 'center',
           gap: 6,
-          marginBottom: 24
+          marginBottom: 24,
         }}
       >
         ← Back to campaigns
@@ -299,82 +313,104 @@ export default function CampaignDetail() {
         style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 24 }}
         className="campaign-detail-grid"
       >
-        <div style={{
-          gridColumn: '1',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 20
-        }}>
-          <div style={{
-            background: '#fff',
-            border: '1.5px solid #FED7AA',
-            borderRadius: 18,
-            padding: '28px 28px 24px',
-            boxShadow: '0 2px 16px rgba(194,65,12,0.07)'
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-              marginBottom: 16
-            }}>
-              <span style={{
-                background: '#FFF7ED',
-                color: '#92400E',
-                fontSize: '0.72rem',
-                fontWeight: 700,
-                padding: '4px 12px',
-                borderRadius: 999,
-                border: '1px solid #FED7AA',
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em'
-              }}>
-                {campaign.category || 'General'}
-              </span>
-
-              <span style={{
-                fontSize: '0.72rem',
-                fontWeight: 700,
-                padding: '4px 12px',
-                borderRadius: 999,
-                background: campaign.status === 'active' ? '#F0FDF4' : '#F3F4F6',
-                color: campaign.status === 'active' ? '#14532D' : '#6B7280',
-                border: `1px solid ${campaign.status === 'active' ? '#BBF7D0' : '#E5E7EB'}`
-              }}>
-                {campaign.status === 'active' ? '● Active' : 'Closed'}
-              </span>
-
-              {isVerified && (
-                <span style={{
-                  background: '#F0FDF4',
-                  color: '#166534',
+        {/* Campaign information */}
+        <div
+          style={{
+            gridColumn: '1',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 20,
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              border: '1.5px solid #FED7AA',
+              borderRadius: 18,
+              padding: '28px 28px 24px',
+              boxShadow: '0 2px 16px rgba(194,65,12,0.07)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                flexWrap: 'wrap',
+                marginBottom: 16,
+              }}
+            >
+              <span
+                style={{
+                  background: '#FFF7ED',
+                  color: '#92400E',
                   fontSize: '0.72rem',
                   fontWeight: 700,
                   padding: '4px 12px',
                   borderRadius: 999,
-                  border: '1px solid #BBF7D0',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4
-                }}>
+                  border: '1px solid #FED7AA',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                }}
+              >
+                {campaign.category || 'General'}
+              </span>
+
+              <span
+                style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  padding: '4px 12px',
+                  borderRadius: 999,
+                  background:
+                    campaign.status === 'active' ? '#F0FDF4' : '#F3F4F6',
+                  color:
+                    campaign.status === 'active' ? '#14532D' : '#6B7280',
+                  border: `1px solid ${
+                    campaign.status === 'active' ? '#BBF7D0' : '#E5E7EB'
+                  }`,
+                }}
+              >
+                {campaign.status === 'active' ? '● Active' : 'Closed'}
+              </span>
+
+              {isVerified && (
+                <span
+                  style={{
+                    background: '#F0FDF4',
+                    color: '#166534',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    padding: '4px 12px',
+                    borderRadius: 999,
+                    border: '1px solid #BBF7D0',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
                   ✓ Verified
                 </span>
               )}
 
               {isUrgent && (
-                <span style={{
-                  background: '#FEF2F2',
-                  color: '#B91C1C',
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  padding: '4px 12px',
-                  borderRadius: 999,
-                  border: '1px solid #FECACA'
-                }}>
-                  🚨 {daysLeftNum === 0
+                <span
+                  style={{
+                    background: '#FEF2F2',
+                    color: '#B91C1C',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    padding: '4px 12px',
+                    borderRadius: 999,
+                    border: '1px solid #FECACA',
+                  }}
+                >
+                  🚨{' '}
+                  {daysLeftNum === 0
                     ? 'Ends today'
-                    : `${daysLeftNum} day${daysLeftNum === 1 ? '' : 's'} left — Act now!`}
+                    : `${daysLeftNum} day${
+                        daysLeftNum === 1 ? '' : 's'
+                      } left — Act now!`}
                 </span>
               )}
 
@@ -383,41 +419,49 @@ export default function CampaignDetail() {
               </div>
             </div>
 
-            <h1 style={{
-              fontFamily: "'Playfair Display',Georgia,serif",
-              fontSize: 'clamp(1.4rem,3vw,2rem)',
-              fontWeight: 900,
-              color: '#7C2D12',
-              margin: '0 0 14px',
-              lineHeight: 1.3
-            }}>
+            <h1
+              style={{
+                fontFamily: "'Playfair Display',Georgia,serif",
+                fontSize: 'clamp(1.4rem,3vw,2rem)',
+                fontWeight: 900,
+                color: '#7C2D12',
+                margin: '0 0 14px',
+                lineHeight: 1.3,
+              }}
+            >
               {campaign.title}
             </h1>
 
-            <p style={{
-              color: '#92400E',
-              lineHeight: 1.75,
-              fontSize: '0.95rem',
-              margin: 0,
-              whiteSpace: 'pre-line'
-            }}>
+            <p
+              style={{
+                color: '#92400E',
+                lineHeight: 1.75,
+                fontSize: '0.95rem',
+                margin: 0,
+                whiteSpace: 'pre-line',
+              }}
+            >
               {campaign.description}
             </p>
 
             {(thumbnailUrl || supportingDocUrl) && (
-              <div style={{
-                marginTop: 20,
-                borderTop: '1px solid #FEF3C7',
-                paddingTop: 16
-              }}>
-                <p style={{
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  color: '#78350F',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  marginBottom: 10
-                }}>
+              <div
+                style={{
+                  marginTop: 20,
+                  borderTop: '1px solid #FEF3C7',
+                  paddingTop: 16,
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    color: '#78350F',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    marginBottom: 10,
+                  }}
+                >
                   Supporting Document
                 </p>
 
@@ -430,7 +474,7 @@ export default function CampaignDetail() {
                       maxHeight: 200,
                       borderRadius: 10,
                       border: '1.5px solid #FED7AA',
-                      objectFit: 'cover'
+                      objectFit: 'cover',
                     }}
                   />
                 ) : (
@@ -449,7 +493,7 @@ export default function CampaignDetail() {
                       color: '#C2410C',
                       fontWeight: 700,
                       fontSize: '0.85rem',
-                      textDecoration: 'none'
+                      textDecoration: 'none',
                     }}
                   >
                     📄 View PDF Document
@@ -459,58 +503,72 @@ export default function CampaignDetail() {
             )}
           </div>
 
+          {/* Campaign impact statements */}
           {impactStatements.length > 0 && (
-            <div style={{
-              background: 'linear-gradient(135deg,#FFF7ED,#FFFBEB)',
-              border: '1.5px solid #FED7AA',
-              borderRadius: 18,
-              padding: '24px 28px',
-              boxShadow: '0 2px 12px rgba(194,65,12,0.06)'
-            }}>
-              <h2 style={{
-                fontFamily: "'Playfair Display',Georgia,serif",
-                fontWeight: 900,
-                color: '#7C2D12',
-                fontSize: '1.1rem',
-                margin: '0 0 16px'
-              }}>
+            <div
+              style={{
+                background: 'linear-gradient(135deg,#FFF7ED,#FFFBEB)',
+                border: '1.5px solid #FED7AA',
+                borderRadius: 18,
+                padding: '24px 28px',
+                boxShadow: '0 2px 12px rgba(194,65,12,0.06)',
+              }}
+            >
+              <h2
+                style={{
+                  fontFamily: "'Playfair Display',Georgia,serif",
+                  fontWeight: 900,
+                  color: '#7C2D12',
+                  fontSize: '1.1rem',
+                  margin: '0 0 16px',
+                }}
+              >
                 Your Impact
               </h2>
 
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 12
-              }}>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 12,
+                }}
+              >
                 {impactStatements.map((stmt, i) => (
-                  <div key={i} style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 12
-                  }}>
-                    <span style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: '50%',
-                      background: 'linear-gradient(135deg,#C2410C,#EA580C)',
-                      color: '#fff',
-                      fontWeight: 800,
-                      fontSize: '0.8rem',
+                  <div
+                    key={i}
+                    style={{
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0
-                    }}>
+                      alignItems: 'flex-start',
+                      gap: 12,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg,#C2410C,#EA580C)',
+                        color: '#fff',
+                        fontWeight: 800,
+                        fontSize: '0.8rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
                       {i + 1}
                     </span>
 
-                    <p style={{
-                      color: '#78350F',
-                      fontSize: '0.9rem',
-                      lineHeight: 1.65,
-                      margin: 0,
-                      fontWeight: 500
-                    }}>
+                    <p
+                      style={{
+                        color: '#78350F',
+                        fontSize: '0.9rem',
+                        lineHeight: 1.65,
+                        margin: 0,
+                        fontWeight: 500,
+                      }}
+                    >
                       {stmt}
                     </p>
                   </div>
@@ -519,59 +577,76 @@ export default function CampaignDetail() {
             </div>
           )}
 
-          <div style={{
-            background: 'linear-gradient(135deg,#FFF7ED,#FFF0E8)',
-            border: '1.5px solid #FED7AA',
-            borderRadius: 18,
-            padding: '24px 28px'
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-end',
-              marginBottom: 12
-            }}>
+          {/* Campaign fundraising progress */}
+          <div
+            style={{
+              background: 'linear-gradient(135deg,#FFF7ED,#FFF0E8)',
+              border: '1.5px solid #FED7AA',
+              borderRadius: 18,
+              padding: '24px 28px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-end',
+                marginBottom: 12,
+              }}
+            >
               <div>
-                <span style={{
-                  fontSize: '2rem',
-                  fontWeight: 900,
-                  color: '#C2410C',
-                  fontVariantNumeric: 'tabular-nums'
-                }}>
-                  ₹{(Number(campaign.raised_amount) || 0).toLocaleString('en-IN')}
+                <span
+                  style={{
+                    fontSize: '2rem',
+                    fontWeight: 900,
+                    color: '#C2410C',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  ₹
+                  {(Number(campaign.raised_amount) || 0).toLocaleString(
+                    'en-IN'
+                  )}
                 </span>
 
-                <span style={{
-                  color: '#A16207',
-                  fontSize: '0.85rem',
-                  marginLeft: 8
-                }}>
+                <span
+                  style={{
+                    color: '#A16207',
+                    fontSize: '0.85rem',
+                    marginLeft: 8,
+                  }}
+                >
                   raised
                 </span>
               </div>
 
-              <span style={{
-                color: '#78350F',
-                fontSize: '0.875rem',
-                fontWeight: 600
-              }}>
-                Goal: ₹{(Number(campaign.goal_amount) || 0).toLocaleString('en-IN')}
+              <span
+                style={{
+                  color: '#78350F',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                }}
+              >
+                Goal: ₹
+                {(Number(campaign.goal_amount) || 0).toLocaleString('en-IN')}
               </span>
             </div>
 
-            <div style={{
-              height: 10,
-              borderRadius: 999,
-              background: '#FED7AA',
-              overflow: 'hidden'
-            }}>
+            <div
+              style={{
+                height: 10,
+                borderRadius: 999,
+                background: '#FED7AA',
+                overflow: 'hidden',
+              }}
+            >
               <div
                 style={{
                   height: '100%',
                   borderRadius: 999,
                   width: `${progressPercent}%`,
                   background: 'linear-gradient(90deg,#C2410C,#EA580C,#F97316)',
-                  transition: 'width 0.6s ease'
+                  transition: 'width 0.6s ease',
                 }}
                 role="progressbar"
                 aria-valuenow={progressPercent}
@@ -580,39 +655,47 @@ export default function CampaignDetail() {
               />
             </div>
 
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              marginTop: 8,
-              fontSize: '0.8rem'
-            }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginTop: 8,
+                fontSize: '0.8rem',
+              }}
+            >
               <span style={{ fontWeight: 800, color: '#EA580C' }}>
                 {progressPercent}% funded
               </span>
 
-              <span style={{
-                color: isUrgent ? '#B91C1C' : '#A16207',
-                fontWeight: isUrgent ? 700 : 400
-              }}>
+              <span
+                style={{
+                  color: isUrgent ? '#B91C1C' : '#A16207',
+                  fontWeight: isUrgent ? 700 : 400,
+                }}
+              >
                 ⏱ {daysLeftText}
               </span>
             </div>
           </div>
 
-
-          <div style={{
-            background: '#fff',
-            border: '1.5px solid #FED7AA',
-            borderRadius: 18,
-            padding: '24px 28px',
-            boxShadow: '0 2px 12px rgba(194,65,12,0.05)'
-          }}>
-            <h2 style={{
-              fontWeight: 800,
-              color: '#7C2D12',
-              fontSize: '1rem',
-              margin: '0 0 16px'
-            }}>
+          {/* Recent supporters */}
+          <div
+            style={{
+              background: '#fff',
+              border: '1.5px solid #FED7AA',
+              borderRadius: 18,
+              padding: '24px 28px',
+              boxShadow: '0 2px 12px rgba(194,65,12,0.05)',
+            }}
+          >
+            <h2
+              style={{
+                fontWeight: 800,
+                color: '#7C2D12',
+                fontSize: '1rem',
+                margin: '0 0 16px',
+              }}
+            >
               Recent Supporters
             </h2>
 
@@ -628,160 +711,210 @@ export default function CampaignDetail() {
               </p>
             )}
 
-            {!donationsLoading && !donationsError && donations.length === 0 && (
-              <p style={{
-                color: '#92400E',
-                fontSize: '0.875rem',
-                fontStyle: 'italic'
-              }}>
-                No donations yet. Be the first to support this campaign! 🙌
-              </p>
-            )}
+            {!donationsLoading &&
+              !donationsError &&
+              donations.length === 0 && (
+                <p
+                  style={{
+                    color: '#92400E',
+                    fontSize: '0.875rem',
+                    fontStyle: 'italic',
+                  }}
+                >
+                  No donations yet. Be the first to support this campaign! 🙌
+                </p>
+              )}
 
-            {!donationsLoading && !donationsError && donations.length > 0 && (
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1
-              }}>
-                {donations.map((d, i) => (
-                  <div key={d.id} style={{
+            {!donationsLoading &&
+              !donationsError &&
+              donations.length > 0 && (
+                <div
+                  style={{
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '10px 0',
-                    borderBottom: i < donations.length - 1
-                      ? '1px solid #FEF3C7'
-                      : 'none'
-                  }}>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10
-                    }}>
-                      <div style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: '50%',
-                        background: 'linear-gradient(135deg,#FFF7ED,#FED7AA)',
+                    flexDirection: 'column',
+                    gap: 1,
+                  }}
+                >
+                  {donations.map((d, i) => (
+                    <div
+                      key={d.id}
+                      style={{
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '0.9rem',
-                        flexShrink: 0
-                      }}>
-                        {d.is_anonymous ? '🕵️' : '💛'}
+                        justifyContent: 'space-between',
+                        padding: '10px 0',
+                        borderBottom:
+                          i < donations.length - 1
+                            ? '1px solid #FEF3C7'
+                            : 'none',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: '50%',
+                            background:
+                              'linear-gradient(135deg,#FFF7ED,#FED7AA)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.9rem',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {d.is_anonymous ? '🕵️' : '💛'}
+                        </div>
+
+                        <div>
+                          <p
+                            style={{
+                              fontWeight: 700,
+                              color: '#1C0A00',
+                              fontSize: '0.875rem',
+                              margin: 0,
+                            }}
+                          >
+                            {d.is_anonymous
+                              ? 'Anonymous'
+                              : d.donor_name || 'Donor'}
+                          </p>
+
+                          <p
+                            style={{
+                              color: '#A16207',
+                              fontSize: '0.72rem',
+                              margin: 0,
+                            }}
+                          >
+                            {d.created_at
+                              ? new Date(d.created_at).toLocaleDateString(
+                                  'en-IN',
+                                  {
+                                    day: 'numeric',
+                                    month: 'short',
+                                  }
+                                )
+                              : ''}
+                          </p>
+                        </div>
                       </div>
 
-                      <div>
-                        <p style={{
-                          fontWeight: 700,
-                          color: '#1C0A00',
-                          fontSize: '0.875rem',
-                          margin: 0
-                        }}>
-                          {d.is_anonymous ? 'Anonymous' : d.donor_name || 'Donor'}
-                        </p>
-
-                        <p style={{
-                          color: '#A16207',
-                          fontSize: '0.72rem',
-                          margin: 0
-                        }}>
-                          {d.created_at
-                            ? new Date(d.created_at).toLocaleDateString('en-IN', {
-                                day: 'numeric',
-                                month: 'short'
-                              })
-                            : ''}
-                        </p>
-                      </div>
+                      <span
+                        style={{
+                          fontWeight: 800,
+                          color: '#C2410C',
+                          fontSize: '0.95rem',
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
+                      >
+                        ₹{Number(d.amount || 0).toLocaleString('en-IN')}
+                      </span>
                     </div>
-
-                    <span style={{
-                      fontWeight: 800,
-                      color: '#C2410C',
-                      fontSize: '0.95rem',
-                      fontVariantNumeric: 'tabular-nums'
-                    }}>
-                      ₹{Number(d.amount || 0).toLocaleString('en-IN')}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
           </div>
         </div>
 
+        {/* Donation form */}
         <div style={{ gridColumn: '1' }} className="donation-card-col">
-          <div style={{
-            background: '#fff',
-            border: '1.5px solid #FED7AA',
-            borderRadius: 18,
-            padding: '28px 24px',
-            boxShadow: '0 4px 24px rgba(194,65,12,0.1)',
-            position: 'sticky',
-            top: 80
-          }}>
+          <div
+            style={{
+              background: '#fff',
+              border: '1.5px solid #FED7AA',
+              borderRadius: 18,
+              padding: '28px 24px',
+              boxShadow: '0 4px 24px rgba(194,65,12,0.1)',
+              position: 'sticky',
+              top: 80,
+            }}
+          >
             {paymentSuccess ? (
               <div style={{ textAlign: 'center', padding: '8px 0' }}>
                 <div style={{ fontSize: '3rem', marginBottom: 12 }}>🎉</div>
 
-                <h3 style={{
-                  fontFamily: "'Playfair Display',Georgia,serif",
-                  fontWeight: 900,
-                  color: '#7C2D12',
-                  fontSize: '1.2rem',
-                  margin: '0 0 8px'
-                }}>
+                <h3
+                  style={{
+                    fontFamily: "'Playfair Display',Georgia,serif",
+                    fontWeight: 900,
+                    color: '#7C2D12',
+                    fontSize: '1.2rem',
+                    margin: '0 0 8px',
+                  }}
+                >
                   Thank you!
                 </h3>
 
-                <p style={{
-                  color: '#92400E',
-                  fontSize: '0.875rem',
-                  margin: '0 0 16px',
-                  lineHeight: 1.6
-                }}>
-                  Your donation of <strong>₹{paymentSuccess.amount}</strong> was successful and is making a difference.
+                <p
+                  style={{
+                    color: '#92400E',
+                    fontSize: '0.875rem',
+                    margin: '0 0 16px',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  Your donation of <strong>₹{paymentSuccess.amount}</strong>{' '}
+                  was successful and is making a difference.
                 </p>
 
-                <div style={{
-                  background: '#FFF7ED',
-                  border: '1px solid #FED7AA',
-                  borderRadius: 10,
-                  padding: 14,
-                  textAlign: 'left',
-                  fontSize: '0.78rem',
-                  marginBottom: 16
-                }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: 8,
-                    marginBottom: 6
-                  }}>
+                <div
+                  style={{
+                    background: '#FFF7ED',
+                    border: '1px solid #FED7AA',
+                    borderRadius: 10,
+                    padding: 14,
+                    textAlign: 'left',
+                    fontSize: '0.78rem',
+                    marginBottom: 16,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      marginBottom: 6,
+                    }}
+                  >
                     <span style={{ color: '#A16207' }}>Payment ID:</span>
-                    <span style={{
-                      color: '#1C0A00',
-                      fontWeight: 600,
-                      wordBreak: 'break-all',
-                      fontFamily: 'monospace'
-                    }}>
+
+                    <span
+                      style={{
+                        color: '#1C0A00',
+                        fontWeight: 600,
+                        wordBreak: 'break-all',
+                        fontFamily: 'monospace',
+                      }}
+                    >
                       {paymentSuccess.paymentId}
                     </span>
                   </div>
 
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: 8
-                  }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                    }}
+                  >
                     <span style={{ color: '#A16207' }}>Receipt:</span>
-                    <span style={{
-                      color: '#14532D',
-                      fontWeight: 700
-                    }}>
+
+                    <span
+                      style={{
+                        color: paymentSuccess.receiptSent
+                          ? '#14532D'
+                          : '#A16207',
+                        fontWeight: 700,
+                      }}
+                    >
                       {paymentSuccess.receiptSent ? '✅ Emailed' : 'Pending'}
                     </span>
                   </div>
@@ -796,7 +929,7 @@ export default function CampaignDetail() {
                     cursor: 'pointer',
                     fontWeight: 700,
                     fontSize: '0.85rem',
-                    fontFamily: 'inherit'
+                    fontFamily: 'inherit',
                   }}
                 >
                   Make another donation
@@ -804,55 +937,65 @@ export default function CampaignDetail() {
               </div>
             ) : (
               <>
-                <h2 style={{
-                  fontFamily: "'Playfair Display',Georgia,serif",
-                  fontWeight: 900,
-                  color: '#7C2D12',
-                  fontSize: '1.15rem',
-                  margin: '0 0 4px'
-                }}>
+                <h2
+                  style={{
+                    fontFamily: "'Playfair Display',Georgia,serif",
+                    fontWeight: 900,
+                    color: '#7C2D12',
+                    fontSize: '1.15rem',
+                    margin: '0 0 4px',
+                  }}
+                >
                   Make a difference
                 </h2>
 
-                <p style={{
-                  color: '#A16207',
-                  fontSize: '0.78rem',
-                  margin: '0 0 20px'
-                }}>
+                <p
+                  style={{
+                    color: '#A16207',
+                    fontSize: '0.78rem',
+                    margin: '0 0 20px',
+                  }}
+                >
                   Every rupee you give brings this campaign closer to its goal.
                 </p>
 
                 {error && (
-                  <div style={{
-                    background: '#FEF2F2',
-                    border: '1px solid #FECACA',
-                    color: '#B91C1C',
-                    borderRadius: 8,
-                    padding: '10px 12px',
-                    fontSize: '0.8rem',
-                    marginBottom: 16
-                  }}>
+                  <div
+                    style={{
+                      background: '#FEF2F2',
+                      border: '1px solid #FECACA',
+                      color: '#B91C1C',
+                      borderRadius: 8,
+                      padding: '10px 12px',
+                      fontSize: '0.8rem',
+                      marginBottom: 16,
+                    }}
+                  >
                     {error}
                   </div>
                 )}
 
                 <form onSubmit={handleDonate}>
-                  <label style={{
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    color: '#78350F',
-                    display: 'block',
-                    marginBottom: 8
-                  }}>
+                  <label
+                    style={{
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      color: '#78350F',
+                      display: 'block',
+                      marginBottom: 8,
+                    }}
+                  >
                     Select amount (₹1 – ₹500)
                   </label>
 
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(4,1fr)',
-                    gap: 8,
-                    marginBottom: 12
-                  }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(4,1fr)',
+                      gap: 8,
+                      marginBottom: 12,
+                    }}
+                  >
                     {PRESET_AMOUNTS.map((p) => (
                       <button
                         key={p}
@@ -865,14 +1008,16 @@ export default function CampaignDetail() {
                           cursor: 'pointer',
                           fontSize: '0.82rem',
                           fontWeight: 800,
-                          background: amount === p
-                            ? 'linear-gradient(135deg,#C2410C,#EA580C)'
-                            : '#FFF7ED',
+                          background:
+                            amount === p
+                              ? 'linear-gradient(135deg,#C2410C,#EA580C)'
+                              : '#FFF7ED',
                           color: amount === p ? '#fff' : '#92400E',
-                          boxShadow: amount === p
-                            ? '0 2px 8px rgba(194,65,12,0.25)'
-                            : 'none',
-                          fontFamily: 'inherit'
+                          boxShadow:
+                            amount === p
+                              ? '0 2px 8px rgba(194,65,12,0.25)'
+                              : 'none',
+                          fontFamily: 'inherit',
                         }}
                       >
                         ₹{p}
@@ -880,20 +1025,24 @@ export default function CampaignDetail() {
                     ))}
                   </div>
 
-                  <div style={{
-                    position: 'relative',
-                    marginBottom: 16
-                  }}>
-                    <span style={{
-                      position: 'absolute',
-                      left: 12,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      color: '#A16207',
-                      fontWeight: 700,
-                      fontSize: '0.9rem',
-                      pointerEvents: 'none'
-                    }}>
+                  <div
+                    style={{
+                      position: 'relative',
+                      marginBottom: 16,
+                    }}
+                  >
+                    <span
+                      style={{
+                        position: 'absolute',
+                        left: 12,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        color: '#A16207',
+                        fontWeight: 700,
+                        fontSize: '0.9rem',
+                        pointerEvents: 'none',
+                      }}
+                    >
                       ₹
                     </span>
 
@@ -918,20 +1067,26 @@ export default function CampaignDetail() {
                         color: '#1C0A00',
                         outline: 'none',
                         boxSizing: 'border-box',
-                        fontFamily: 'inherit'
+                        fontFamily: 'inherit',
                       }}
-                      onFocus={(e) => e.target.style.borderColor = '#EA580C'}
-                      onBlur={(e) => e.target.style.borderColor = '#FED7AA'}
+                      onFocus={(e) =>
+                        (e.target.style.borderColor = '#EA580C')
+                      }
+                      onBlur={(e) =>
+                        (e.target.style.borderColor = '#FED7AA')
+                      }
                     />
                   </div>
 
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    cursor: 'pointer',
-                    marginBottom: 20
-                  }}>
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      marginBottom: 20,
+                    }}
+                  >
                     <input
                       type="checkbox"
                       id="isAnonymous"
@@ -941,15 +1096,17 @@ export default function CampaignDetail() {
                         width: 16,
                         height: 16,
                         accentColor: '#EA580C',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
                       }}
                     />
 
-                    <span style={{
-                      fontSize: '0.82rem',
-                      color: '#78350F',
-                      fontWeight: 500
-                    }}>
+                    <span
+                      style={{
+                        fontSize: '0.82rem',
+                        color: '#78350F',
+                        fontWeight: 500,
+                      }}
+                    >
                       Donate anonymously
                     </span>
                   </label>
@@ -974,19 +1131,22 @@ export default function CampaignDetail() {
                       justifyContent: 'center',
                       alignItems: 'center',
                       gap: 8,
-                      fontFamily: 'inherit'
+                      fontFamily: 'inherit',
                     }}
                   >
                     {isSubmitting ? (
                       <>
-                        <div style={{
-                          width: 16,
-                          height: 16,
-                          border: '2px solid rgba(255,255,255,0.4)',
-                          borderTop: '2px solid #fff',
-                          borderRadius: '50%',
-                          animation: 'spin 0.7s linear infinite'
-                        }} />
+                        <div
+                          style={{
+                            width: 16,
+                            height: 16,
+                            border: '2px solid rgba(255,255,255,0.4)',
+                            borderTop: '2px solid #fff',
+                            borderRadius: '50%',
+                            animation: 'spin 0.7s linear infinite',
+                          }}
+                        />
+
                         <span>Opening payment…</span>
                       </>
                     ) : (
@@ -995,12 +1155,14 @@ export default function CampaignDetail() {
                   </button>
                 </form>
 
-                <p style={{
-                  textAlign: 'center',
-                  fontSize: '0.7rem',
-                  color: '#A16207',
-                  marginTop: 10
-                }}>
+                <p
+                  style={{
+                    textAlign: 'center',
+                    fontSize: '0.7rem',
+                    color: '#A16207',
+                    marginTop: 10,
+                  }}
+                >
                   Secure payment via Razorpay
                 </p>
               </>
@@ -1011,9 +1173,16 @@ export default function CampaignDetail() {
 
       <style>{`
         @keyframes spin{to{transform:rotate(360deg)}}
+
         @media (min-width:768px) {
-          .campaign-detail-grid { grid-template-columns: 1fr 340px !important; }
-          .donation-card-col { grid-column: 2 !important; grid-row: 1 !important; }
+          .campaign-detail-grid {
+            grid-template-columns: 1fr 340px !important;
+          }
+
+          .donation-card-col {
+            grid-column: 2 !important;
+            grid-row: 1 !important;
+          }
         }
       `}</style>
 
@@ -1023,7 +1192,9 @@ export default function CampaignDetail() {
         onSuccess={handleCheckoutSuccess}
         amount={Number(amount)}
         campaignTitle={campaign.title}
-        donorName={isAnonymous ? 'Anonymous Donor' : user?.display_name || 'Donor'}
+        donorName={
+          isAnonymous ? 'Anonymous Donor' : user?.display_name || 'Donor'
+        }
         donorEmail={user?.email || 'donor@example.com'}
         orderId={checkoutOrderData?.order_id}
       />

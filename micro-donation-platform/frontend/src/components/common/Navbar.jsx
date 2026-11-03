@@ -66,6 +66,15 @@ export default function Navbar() {
           <Link to="/campaigns" style={linkStyle('/campaigns')}>Browse</Link>
           {user && <Link to="/dashboard" style={linkStyle('/dashboard')}>Dashboard</Link>}
           {user?.role === 'admin' && <Link to="/admin" style={linkStyle('/admin')}>Admin</Link>}
+          {user && (
+            <Link to="/campaigns/new" style={{
+              fontSize: '0.875rem', fontWeight: 700,
+              background: 'linear-gradient(135deg, #C2410C, #EA580C)',
+              color: '#fff', textDecoration: 'none',
+              padding: '7px 16px', borderRadius: 8,
+              boxShadow: '0 2px 8px rgba(194,65,12,0.3)',
+            }}>+ Start Campaign</Link>
+          )}
         </div>
 
         {/* Desktop auth */}
@@ -134,6 +143,7 @@ export default function Navbar() {
           {[
             { to: '/campaigns', label: 'Browse Campaigns' },
             ...(user ? [{ to: '/dashboard', label: 'Dashboard' }] : []),
+            ...(user ? [{ to: '/campaigns/new', label: '+ Start Campaign' }] : []),
             ...(user?.role === 'admin' ? [{ to: '/admin', label: 'Admin' }] : []),
           ].map(({ to, label }) => (
             <Link key={to} to={to} onClick={() => setMenuOpen(false)} style={{
