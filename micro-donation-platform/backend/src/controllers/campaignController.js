@@ -537,9 +537,9 @@ const getPublicStats = async (req, res) => {
         .eq('status', 'completed'),
       supabase
         .from('donations')
-        .select('user_id', { count: 'exact' })
+        .select('donor_id', { count: 'exact' })
         .eq('status', 'completed')
-        .not('user_id', 'is', null),
+        .not('donor_id', 'is', null),
     ]);
 
     if (campaignsRes.error) throw campaignsRes.error;
@@ -547,7 +547,7 @@ const getPublicStats = async (req, res) => {
     if (donorsRes.error) throw donorsRes.error;
 
     // Count unique donor IDs
-    const uniqueDonors = new Set((donorsRes.data || []).map((r) => r.user_id)).size;
+    const uniqueDonors = new Set((donorsRes.data || []).map((r) => r.donor_id)).size;
 
     return res.status(200).json({
       total_campaigns: campaignsRes.count || 0,
