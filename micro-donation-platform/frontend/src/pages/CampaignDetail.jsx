@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
+import CampaignUpdates from '../components/campaign/CampaignUpdates';
 import ShareButton from '../components/campaign/ShareButton';
 import RazorpayCheckoutModal from '../components/campaign/RazorpayCheckoutModal';
 import { getRemainingDaysText } from '../utils/dateUtils';
@@ -32,11 +33,22 @@ export default function CampaignDetail() {
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true); setCampaign(null); setCampaignError('');
-    api.get(`/campaigns/${id}`, { signal: controller.signal })
-      .then(({ data }) => { if (!controller.signal.aborted) setCampaign(data); })
-      .catch(error => { if (!controller.signal.aborted) setCampaignError(error.response?.status === 404 ? 'Campaign not found.' : 'Unable to load campaign. Please try again.'); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    setLoading(true);
+    setCampaign(null);
+    setCampaignError('');
+    const fetchCampaign = async () => {
+      try {
+        const res = await api.get(`/campaigns/${id}`, { signal: controller.signal });
+        if (!controller.signal.aborted) setCampaign(res.data);
+      } catch (err) {
+        if (!controller.signal.aborted) setCampaignError(err.response?.status === 404
+          ? 'Campaign not found.' : 'Unable to load this campaign. Please try again.');
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    };
+
+    fetchCampaign();
     return () => controller.abort();
   }, [id]);
 
@@ -120,7 +132,13 @@ export default function CampaignDetail() {
     );
   }
 
-  if (campaignError || !campaign) return <p role="alert">{campaignError || 'Campaign not found.'}</p>;
+  if (campaignError || !campaign) {
+    return <div className="max-w-4xl mx-auto py-8 px-4">
+      <p role="alert" className="text-rose-700">{campaignError || 'Campaign not found.'}</p>
+      <Link to="/campaigns" className="mt-4 inline-block text-indigo-600 hover:underline">Browse campaigns</Link>
+    </div>;
+  }
+
   const canDonate = campaign.accepting_donations === true;
   const progressPercent = Math.min(100, Math.round(((campaign?.raised_amount||0)/(campaign?.goal_amount||1))*100));
   const daysLeftText = getRemainingDaysText(campaign);
@@ -240,6 +258,8 @@ export default function CampaignDetail() {
               <span style={{ color: isUrgent?'#B91C1C':'#A16207', fontWeight: isUrgent?700:400 }}>⏱ {daysLeftText}</span>
             </div>
           </div>
+
+          <CampaignUpdates key={campaign.id} campaign={campaign} />
 
           {/* Recent donations */}
           <div style={{ background:'#fff', border:'1.5px solid #FED7AA', borderRadius:18, padding:'24px 28px', boxShadow:'0 2px 12px rgba(194,65,12,0.05)' }}>

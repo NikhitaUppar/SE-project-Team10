@@ -6,8 +6,9 @@ Branch: `feature/13-auto-close-campaigns`. The existing `c03728f` implementation
 was preserved and integrated with main at `d9c48d1` on 2026-11-02. Main was
 updated with `git pull --ff-only origin main` after checking a clean working tree
 and fetching/pruning. No destructive reset, force push, or main commit was used.
-Issue #12 / PR #39 is still unmerged and is not a dependency of this branch.
-Its branch and progress-update implementation are preserved separately.
+At initial implementation, issue #12 / PR #39 was unmerged. It is now part of
+main and its progress timeline/posting behavior is preserved by the 2026-11-03
+conflict resolution. The donor leaderboard remains separate in PR #53.
 
 ## Findings before integration
 
@@ -197,3 +198,28 @@ and isolated Chrome checks passed. Full backend: **247 passed / 12 failed**,
 with all failures independently reproduced on main in the login suite. No new dependency or secret is included.
 
 Push and PR creation require the user's confirmation. Never merge automatically.
+
+
+## 2026-11-03: PR #52 conflict resolution
+
+Integrated main `8816d6d` into the existing PR branch. Resolved README, CHANGELOG,
+and CampaignDetail conflicts. Kept both feature guides/change histories, main's
+real campaign error screen and request cancellation, merged progress timeline,
+owner form, new campaign-start navigation, and video uploads. Expiry scheduling,
+API eligibility, transactional payment reconciliation, and unavailable donation
+controls remain intact. No new migration or production behavior was added by
+this conflict fix; the already documented 013 migration is still required and
+has not been applied to shared Supabase.
+
+Extended the isolated expiry fixture to serve progress reads and the browser
+check to confirm history remains visible on an expired campaign. Both Chrome
+walkthroughs passed: expiry/stale-page restrictions/reload/browse, plus owner
+posting, chronology, validation, retries, persistence, reader restrictions,
+closed/missing campaigns, mobile layout, sharing, and impact text. Frontend build
+passed. Full backend: **248 passed / 12 failed**, **21 suites passed / 1 failed**.
+All failures are in the unchanged inherited login suite; expiry, settlement, and
+progress integration checks passed. The earlier 247 result above is historical.
+
+Follow-up edits: README.md, CHANGELOG.md, CampaignDetail.jsx, this guide, and the
+expiry browser/fixture files; main's merged files are retained. No private .env
+changes, shared database writes, real payments, or emails were used.

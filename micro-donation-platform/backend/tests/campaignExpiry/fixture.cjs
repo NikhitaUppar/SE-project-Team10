@@ -16,6 +16,7 @@ async function createFixture() {
   await db.exec(`
     GRANT USAGE ON SCHEMA public TO service_role;
     GRANT SELECT ON public.users TO service_role;
+    GRANT SELECT ON public.campaign_updates TO service_role;
     GRANT SELECT, UPDATE, INSERT ON public.campaigns TO service_role;
     GRANT SELECT, UPDATE, INSERT ON public.donations TO service_role;
     CREATE TABLE public.test_expiry_audit (campaign_id uuid, previous_status text, next_status text);
@@ -67,6 +68,12 @@ async function createFixture() {
       const c = req.body;
       const { rows } = await query('INSERT INTO public.campaigns (owner_id,title,description,goal_amount,category,deadline,status) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *', [c.owner_id, c.title, c.description, c.goal_amount, c.category, c.deadline, c.status]);
       return respond(req, res.status(201), rows);
+    } catch { return res.status(500).json({ code: 'TEST_ERROR' }); }
+  });
+  rest.get('/rest/v1/campaign_updates', async (req, res) => {
+    try {
+      const { rows } = await query('SELECT id,campaign_id,content,created_at FROM public.campaign_updates WHERE campaign_id=$1 ORDER BY created_at ASC,id ASC', [req.query.campaign_id.slice(3)]);
+      return res.json(rows);
     } catch { return res.status(500).json({ code: 'TEST_ERROR' }); }
   });
   rest.post('/rest/v1/rpc/settle_campaign_payment', async (req, res) => {

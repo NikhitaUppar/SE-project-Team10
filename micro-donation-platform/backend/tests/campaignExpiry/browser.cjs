@@ -27,8 +27,9 @@ async function run() {
     await page.getByRole('heading', { name: 'Donations unavailable' }).waitFor();
     assert.equal(await page.locator('form button[type="submit"]').count(), 0);
     await page.getByText('closed', { exact: true }).waitFor();
+    await page.getByText('Existing progress must remain', { exact: true }).waitFor();
     assert.equal(orderRequests, 0);
-    console.log('PASS: expired detail shows closed and has no donation form before the daily job');
+    console.log('PASS: expired detail shows closed, hides the donation form, and preserves progress updates before the daily job');
 
     await page.goto(`http://localhost:5173/campaigns/${fixture.ids.future}`);
     const donate = page.locator('form button[type="submit"]');
