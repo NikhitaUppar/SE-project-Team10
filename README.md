@@ -35,6 +35,9 @@
 Campaign donor leaderboard (issue #36), privacy rules, API, and tests are documented in
 [the donor leaderboard guide](micro-donation-platform/backend/ISSUE_36_DONOR_LEADERBOARD.md).
 
+Daily campaign expiry (issue #13), payment reconciliation, and verification are documented in
+[the auto-close guide](micro-donation-platform/backend/ISSUE_13_AUTO_CLOSE.md).
+
 Campaign progress updates (issue #12), API rules, and test instructions are in
 [the progress updates guide](micro-donation-platform/backend/ISSUE_12_PROGRESS_UPDATES.md).
 

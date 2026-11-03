@@ -117,6 +117,20 @@ describe('FR-20: Campaign Fundraising Statistics', () => {
     expect(supabase.from).not.toHaveBeenCalled();
   });
 
+  test('excludes captured payments awaiting reconciliation from owner totals and timeline', async () => {
+    supabase.from
+      .mockReturnValueOnce(makeCampaignQuery({ data: campaign, error: null }))
+      .mockReturnValueOnce(makeDonationQuery({ data: [
+        ...donations,
+        { amount: 50, donor_id: 'late-donor', created_at: '2026-10-30T12:00:00Z', campaign_credited: false },
+      ], error: null }));
+    await getCampaignStats(req, res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      stats: { total_raised: 3000, donor_count: 2 },
+      timeline: [{ date: '2026-10-28', amount: 1500 }, { date: '2026-10-29', amount: 1500 }],
+    }));
+  });
+
   test('returns 404 when the campaign does not exist', async () => {
     supabase.from.mockReturnValueOnce(
       makeCampaignQuery({ data: null, error: null })

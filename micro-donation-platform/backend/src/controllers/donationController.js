@@ -5,6 +5,8 @@ const crypto = require('crypto');
 const supabase = require('../config/supabase');
 
 const emailController = require('./emailController');
+const { canAcceptDonations } = require('../services/campaignLifecycle');
+const { settleCapturedDonation } = require('../services/paymentSettlement');
 
 
 
@@ -70,49 +72,14 @@ const createOrder = async (req, res) => {
 
 
 
-    // 2. Check campaign exists and is active
-
-    let campaign = null;
-
-    if (isSupabaseConfigured()) {
-
-      try {
-
-        const { data, error } = await supabase
-
-          .from('campaigns')
-
-          .select('*')
-
-          .eq('id', campaign_id)
-
-          .single();
-
-
-
-        if (!error && data) {
-
-          campaign = data;
-
-        }
-
-      } catch (dbErr) {
-
-        console.warn('Notice: Could not check campaign in database:', dbErr.message);
-
-      }
-
+    // Always consult the database before creating a new order, including in tests.
+    const { data: campaign, error: campaignError } = await supabase.from('campaigns')
+      .select('id, status, deadline').eq('id', campaign_id).maybeSingle();
+    if (campaignError) return res.status(503).json({ error: 'Unable to check campaign availability' });
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+    if (!canAcceptDonations(campaign)) {
+      return res.status(409).json({ error: 'Campaign is not accepting donations' });
     }
-
-
-
-    if (campaign && campaign.status !== 'active') {
-
-      return res.status(400).json({ error: 'Campaign is not currently active' });
-
-    }
-
-
 
     // 3. Create Razorpay order
 
@@ -248,15 +215,12 @@ const createOrder = async (req, res) => {
 
 
 
-        if (!error && data) {
-
-          donationRecord = data;
-
-        }
+        if (error || !data) return res.status(503).json({ error: 'Unable to save payment order. Please retry.' });
+        donationRecord = data;
 
       } catch (dbErr) {
 
-        console.warn('Notice: Could not insert pending donation into DB:', dbErr.message);
+        return res.status(503).json({ error: 'Unable to save payment order. Please retry.' });
 
       }
 
@@ -350,7 +314,7 @@ const verifyPayment = async (req, res) => {
 
     // 2. Idempotency check: if order was already processed, return 200 without duplicate email
 
-    if (processedOrders.has(razorpay_order_id)) {
+    if (!isSupabaseConfigured() && processedOrders.has(razorpay_order_id)) {
 
       return res.status(200).json({
 
@@ -367,112 +331,20 @@ const verifyPayment = async (req, res) => {
 
 
     let donation = null;
-
+    let settlement = null;
     if (isSupabaseConfigured()) {
-
       try {
-
-        const { data } = await supabase
-
-          .from('donations')
-
-          .select('*, campaigns(*), users(*)')
-
-          .eq('razorpay_order_id', razorpay_order_id)
-
-          .single();
-
-
-
+        settlement = await settleCapturedDonation({ orderId: razorpay_order_id, paymentId: razorpay_payment_id, donorId: req.user?.id });
+        if (settlement.result === 'missing') return res.status(404).json({ error: 'Payment order not found' });
+        if (settlement.result === 'forbidden') return res.status(403).json({ error: 'Payment order belongs to another donor' });
+        if (!['completed', 'already_completed'].includes(settlement.result)) return res.status(409).json({ error: 'Payment cannot be reconciled' });
+        if (settlement.result === 'already_completed') return res.json({ status: 'ok', already_processed: true, campaign_credited: settlement.credited, reconciliation_required: settlement.credited === false });
+        const { data } = await supabase.from('donations').select('*, campaigns(*), users(*)').eq('razorpay_order_id', razorpay_order_id).single();
         donation = data;
-
-
-
-        if (donation && donation.status === 'completed') {
-
-          processedOrders.add(razorpay_order_id);
-
-          return res.status(200).json({
-
-            status: 'ok',
-
-            message: 'Payment already completed and receipt already sent',
-
-            already_processed: true,
-
-          });
-
-        }
-
-
-
-        // Update donation status to completed
-
-        const { data: updated } = await supabase
-
-          .from('donations')
-
-          .update({
-
-            status: 'completed',
-
-            razorpay_payment_id,
-
-          })
-
-          .eq('razorpay_order_id', razorpay_order_id)
-
-          .select('*, campaigns(*), users(*)')
-
-          .single();
-
-
-
-        if (updated) donation = updated;
-
-
-
-        // Update campaign raised_amount
-
-        if (donation?.campaign_id) {
-
-          const { data: campaign } = await supabase
-
-            .from('campaigns')
-
-            .select('raised_amount')
-
-            .eq('id', donation.campaign_id)
-
-            .single();
-
-
-
-          if (campaign) {
-
-            const newRaised = (Number(campaign.raised_amount) || 0) + Number(donation.amount);
-
-            await supabase
-
-              .from('campaigns')
-
-              .update({ raised_amount: newRaised })
-
-              .eq('id', donation.campaign_id);
-
-          }
-
-        }
-
-      } catch (dbErr) {
-
-        console.warn('Notice: Error verifying payment in DB:', dbErr.message);
-
+      } catch {
+        return res.status(503).json({ error: 'Payment reconciliation unavailable. Please retry.' });
       }
-
     }
-
-
 
     // Mark as processed in idempotency set
 
@@ -549,6 +421,8 @@ const verifyPayment = async (req, res) => {
       receipt_sent: emailResult?.success ?? true,
 
       donation_id: donation?.id || null,
+      campaign_credited: settlement?.credited,
+      reconciliation_required: settlement?.credited === false,
 
     });
 
@@ -644,7 +518,7 @@ const verifyWebhook = async (req, res) => {
 
       // Idempotency: skip if already processed
 
-      if (orderId && processedOrders.has(orderId)) {
+      if (!isSupabaseConfigured() && orderId && processedOrders.has(orderId)) {
 
         return res.status(200).json({ status: 'ok', received: true, already_processed: true });
 
@@ -653,98 +527,19 @@ const verifyWebhook = async (req, res) => {
 
 
       let donation = null;
-
-      if (isSupabaseConfigured() && orderId) {
-
+      if (isSupabaseConfigured()) {
+        if (!orderId || !paymentId) return res.status(400).json({ error: 'Missing captured payment identifiers' });
         try {
-
-          const { data: existing } = await supabase
-
-            .from('donations')
-
-            .select('*, campaigns(*), users(*)')
-
-            .eq('razorpay_order_id', orderId)
-
-            .single();
-
-
-
-          if (existing && existing.status === 'completed') {
-
-            processedOrders.add(orderId);
-
-            return res.status(200).json({ status: 'ok', received: true, already_processed: true });
-
-          }
-
-
-
-          const { data } = await supabase
-
-            .from('donations')
-
-            .update({
-
-              status: 'completed',
-
-              razorpay_payment_id: paymentId || null,
-
-            })
-
-            .eq('razorpay_order_id', orderId)
-
-            .select('*, campaigns(*), users(*)')
-
-            .single();
-
-
-
+          const settlement = await settleCapturedDonation({ orderId, paymentId });
+          if (settlement.result === 'missing') return res.status(503).json({ error: 'Payment order not available; retry delivery' });
+          if (!['completed', 'already_completed'].includes(settlement.result)) return res.status(409).json({ error: 'Payment cannot be reconciled' });
+          if (settlement.result === 'already_completed') return res.json({ status: 'ok', received: true, already_processed: true });
+          const { data } = await supabase.from('donations').select('*, campaigns(*), users(*)').eq('razorpay_order_id', orderId).single();
           donation = data;
-
-
-
-          // Update campaign raised_amount
-
-          if (donation?.campaign_id) {
-
-            const { data: campaign } = await supabase
-
-              .from('campaigns')
-
-              .select('raised_amount')
-
-              .eq('id', donation.campaign_id)
-
-              .single();
-
-
-
-            if (campaign) {
-
-              const newRaised = (Number(campaign.raised_amount) || 0) + Number(donation.amount);
-
-              await supabase
-
-                .from('campaigns')
-
-                .update({ raised_amount: newRaised })
-
-                .eq('id', donation.campaign_id);
-
-            }
-
-          }
-
-        } catch (dbErr) {
-
-          console.warn('Notice: Webhook DB update error:', dbErr.message);
-
+        } catch {
+          return res.status(503).json({ error: 'Payment reconciliation unavailable; retry delivery' });
         }
-
       }
-
-
 
       if (orderId) {
 
@@ -824,7 +619,7 @@ const verifyWebhook = async (req, res) => {
 
             })
 
-            .eq('razorpay_order_id', orderId);
+            .eq('razorpay_order_id', orderId).eq('status', 'pending');
 
         } catch (dbErr) {
 
