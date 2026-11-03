@@ -20,6 +20,16 @@ all failures are in the inherited login suite (the hard-coded demo-account
 bypass in auth middleware). No shared Supabase writes or private env changes.
 The payment migration below remains required and has not been applied remotely.
 
+### Separately authorized login fix
+
+The user approved repairing the inherited authentication regression in a separate
+commit. Removed only the special UUID bypass from `src/middleware/auth.js`.
+Every account now goes through the existing verified-user, current role, and
+session-version checks; the existing login tests exercise those paths. No test
+was weakened, and no password, token, private configuration, or database row was
+changed. Final backend validation: **260 tests passed, 22 suites passed, zero failures**.
+The historical failures below describe the state before this fix.
+
 The older branch names, PR links and validation entries below are historical.
 
 Branch: `feature/13-auto-close-campaigns`. The existing `c03728f` implementation
