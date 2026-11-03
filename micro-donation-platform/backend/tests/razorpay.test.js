@@ -9,9 +9,13 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 // Exercise real authentication with a database fixture instead of an environment bypass.
 jest.mock('../src/config/supabase', () => ({
-  from: jest.fn(() => ({
+  from: jest.fn((table) => ({
     select: jest.fn(() => ({
       eq: jest.fn(() => ({
+        maybeSingle: jest.fn().mockResolvedValue({
+          data: table === 'campaigns' ? { id: '22222222-2222-2222-2222-222222222222', status: 'active', deadline: '2099-12-31T00:00:00Z' } : null,
+          error: null,
+        }),
         single: jest.fn().mockResolvedValue({
           data: {
             id: '11111111-1111-1111-1111-111111111111',

@@ -54,6 +54,7 @@ export default function CampaignDetail() {
   const handleDonate = async (e) => {
     e.preventDefault();
     setError('');
+    if (!campaign?.accepting_donations) { setError('Campaign is not accepting donations'); return; }
     const num = Number(amount);
     if (!num || num < 1 || num > 500) {
       setError('Donation amount must be between ₹1 and ₹500.');
@@ -89,21 +90,20 @@ export default function CampaignDetail() {
     const orderId = response.razorpay_order_id || checkoutOrderData?.order_id;
     const signature = response.razorpay_signature || 'dev_test_sig';
 
-    let receiptSent = false;
     try {
-      const v = await api.post('/donations/verify', {
-        razorpay_order_id: orderId,
-        razorpay_payment_id: paymentId,
-        razorpay_signature: signature,
+      const { data } = await api.post('/donations/verify', {
+        razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature,
       });
-      receiptSent = v.data?.receipt_sent;
+      setPaymentSuccess({ paymentId, orderId, amount: num, receiptSent: data.receipt_sent,
+        reconciliationRequired: data.reconciliation_required });
+      // Refresh authoritative accounting; a late capture must not optimistically
+      // increase a closed campaign's displayed raised total.
+      const detail = await api.get(`/campaigns/${id}`);
+      setCampaign(detail.data);
       setDonorRefresh(value => value + 1);
-    } catch (vErr) {
-      console.warn('Payment verification callback notice:', vErr.message);
+    } catch (verificationError) {
+      setError(verificationError.response?.data?.error || 'Unable to confirm payment. Please retry verification before paying again.');
     }
-
-    setPaymentSuccess({ paymentId, orderId, amount: num, receiptSent });
-    setCampaign(prev => ({ ...prev, raised_amount: (Number(prev?.raised_amount)||0) + num }));
     setIsSubmitting(false);
   };
 
@@ -124,6 +124,7 @@ export default function CampaignDetail() {
     </div>;
   }
 
+  const canDonate = campaign.accepting_donations === true;
   const progressPercent = Math.min(100, Math.round(((campaign?.raised_amount||0)/(campaign?.goal_amount||1))*100));
   const daysLeftText = getRemainingDaysText(campaign);
   const daysLeftNum = (() => {
@@ -158,7 +159,7 @@ export default function CampaignDetail() {
                 {campaign?.category || 'General'}
               </span>
               <span style={{ fontSize:'0.72rem', fontWeight:700, padding:'4px 12px', borderRadius:999, background: campaign?.status==='active'?'#F0FDF4':'#F3F4F6', color: campaign?.status==='active'?'#14532D':'#6B7280', border:`1px solid ${campaign?.status==='active'?'#BBF7D0':'#E5E7EB'}` }}>
-                {campaign?.status==='active' ? '● Active' : 'Closed'}
+                {campaign.status.replaceAll('_', ' ')}
               </span>
               {isVerified && (
                 <span style={{ background:'#EFF6FF', color:'#1D4ED8', fontSize:'0.72rem', fontWeight:700, padding:'4px 12px', borderRadius:999, border:'1px solid #BFDBFE', display:'inline-flex', alignItems:'center', gap:4 }}>
@@ -257,7 +258,7 @@ export default function CampaignDetail() {
                   Thank you!
                 </h3>
                 <p style={{ color:'#92400E', fontSize:'0.875rem', margin:'0 0 16px', lineHeight:1.6 }}>
-                  Your donation of <strong>₹{paymentSuccess.amount}</strong> was successful and is making a difference.
+                  {paymentSuccess.reconciliationRequired ? 'Your payment was received after this campaign stopped accepting donations. Please contact the organiser for reconciliation.' : <>Your donation of <strong>₹{paymentSuccess.amount}</strong> was successful and is making a difference.</>}
                 </p>
                 <div style={{ background:'#FFF7ED', border:'1px solid #FED7AA', borderRadius:10, padding:'14px', textAlign:'left', fontSize:'0.78rem', marginBottom:16 }}>
                   <div style={{ display:'flex', justifyContent:'space-between', gap:8, marginBottom:6 }}>
@@ -266,7 +267,7 @@ export default function CampaignDetail() {
                   </div>
                   <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
                     <span style={{ color:'#A16207' }}>Receipt:</span>
-                    <span style={{ color:'#14532D', fontWeight:700 }}>✅ Emailed</span>
+                    <span style={{ color:'#14532D', fontWeight:700 }}>{paymentSuccess.receiptSent ? 'Emailed' : 'Check your email or contact support'}</span>
                   </div>
                 </div>
                 <button onClick={() => setPaymentSuccess(null)} style={{ color:'#EA580C', background:'none', border:'none', cursor:'pointer', fontWeight:700, fontSize:'0.85rem', fontFamily:'inherit' }}>
@@ -276,7 +277,7 @@ export default function CampaignDetail() {
             ) : (
               <>
                 <h2 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontWeight:900, color:'#7C2D12', fontSize:'1.15rem', margin:'0 0 4px' }}>
-                  Make a difference
+                  {canDonate ? 'Make a difference' : 'Donations unavailable'}
                 </h2>
                 <p style={{ color:'#A16207', fontSize:'0.78rem', margin:'0 0 20px' }}>Every rupee you give brings this campaign closer to its goal.</p>
 
@@ -286,7 +287,7 @@ export default function CampaignDetail() {
                   </div>
                 )}
 
-                <form onSubmit={handleDonate}>
+                {canDonate ? <form onSubmit={handleDonate}>
                   <label style={{ fontSize:'0.78rem', fontWeight:700, color:'#78350F', display:'block', marginBottom:8 }}>
                     Select amount (₹1 – ₹500)
                   </label>
@@ -333,7 +334,7 @@ export default function CampaignDetail() {
                       <span>Donate ₹{amount || 0} →</span>
                     )}
                   </button>
-                </form>
+                </form> : <p role="status" style={{ color: '#92400E' }}>This campaign is closed or no longer accepting donations. Its history remains available.</p>}
                 <p style={{ textAlign:'center', fontSize:'0.7rem', color:'#A16207', marginTop:10 }}>
                   Secure payment via Razorpay
                 </p>
