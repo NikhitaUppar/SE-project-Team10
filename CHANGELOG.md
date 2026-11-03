@@ -1,5 +1,16 @@
 # Project change record
 
+## 2026-11-03: Recover issues #13 and #36 after rewritten main
+
+- Updated local main to `30147ca`, retaining backup branches and original PR work.
+- Reapplied feature-only changes onto current history; resolved CampaignDetail,
+  README and CHANGELOG overlap while retaining accounting and donor refresh.
+- Added browser coverage for the shared successful/late/failed payment callback.
+- Separately approved auth fix removes the demo-account bypass (12 lines).
+- Combined backend: 277 tests / 24 suites pass; frontend build passes.
+- No shared database changes. Issue #13's existing migration remains unapplied.
+
+
 ## 2026-11-03: PR #53 conflict resolution
 
 - Integrated main `8816d6d`, including merged progress updates, video support,
