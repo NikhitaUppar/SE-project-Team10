@@ -18,16 +18,19 @@ const {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = [
       'image/jpeg',
       'image/png',
       'application/pdf',
+      'video/mp4',
+      'video/webm',
+      'video/quicktime',
     ];
 
     if (!allowed.includes(file.mimetype)) {
-      return cb(new Error('Only JPG, PNG, and PDF files are allowed'));
+      return cb(new Error('Only JPG, PNG, PDF, MP4, WebM, and MOV files are allowed'));
     }
 
     cb(null, true);
@@ -39,7 +42,7 @@ const handleCampaignUpload = (req, res, next) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({
-          error: 'File size must not exceed 5MB',
+          error: 'File size must not exceed 50MB',
         });
       }
 

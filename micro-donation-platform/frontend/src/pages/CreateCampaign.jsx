@@ -381,7 +381,7 @@ export default function CreateCampaign() {
         {/* Supporting Document */}
         <div>
           <label style={labelStyle}>
-            Supporting Document (optional)
+            Supporting Media (optional)
           </label>
 
           <p style={{
@@ -390,12 +390,12 @@ export default function CreateCampaign() {
             marginBottom: 8,
             marginTop: 0,
           }}>
-            Upload an image or PDF (max 5MB) to support your campaign.
+            Upload an image, PDF, or video (MP4/WebM/MOV, max 50MB) to support your campaign.
           </p>
 
           <input
             type="file"
-            accept="image/jpeg,image/png,application/pdf"
+            accept="image/jpeg,image/png,application/pdf,video/mp4,video/webm,video/quicktime"
             onChange={e => setFile(e.target.files?.[0] || null)}
             style={{
               fontSize: '0.85rem',
