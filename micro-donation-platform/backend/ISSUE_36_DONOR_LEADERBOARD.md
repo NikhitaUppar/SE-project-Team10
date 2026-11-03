@@ -1,5 +1,38 @@
 # Issue #36: [UI] Donor leaderboard on campaign page
 
+## Current recovery and actual conflicts (2026-11-03)
+
+- Current main: `30147ca`, whose files are identical to old main `8816d6d`.
+  GitHub rewrote the history: both old PR heads have no common ancestor with new
+  main. This is not a shallow clone. PRs #52/#53 were closed without merging.
+- Recovered only the two feature diffs onto new branches based on current main;
+  original branches and old local main are preserved. No force push or
+  unrelated-history merge was used.
+- Reproduced the three feature-to-feature conflicts: `CampaignDetail.jsx`,
+  `README.md`, and `CHANGELOG.md`. The UI conflict was in payment confirmation:
+  issue #13 refreshes authoritative campaign accounting, while issue #36 removes
+  the old donations state and refreshes the leaderboard. The resolution keeps
+  the authoritative total and calls `setDonorRefresh`; it does not call the
+  removed `setDonations` or optimistically inflate closed campaign totals.
+- The replacement leaderboard branch `fix/36-donor-leaderboard-current-main`
+  depends on `fix/13-auto-close-current-main`. Review/merge issue #13 first, then
+  retarget the leaderboard PR to main. Its diff against its base contains only
+  the leaderboard feature and its integration checks/docs.
+- Separately authorized fix `57a7f05` removes 12 lines of hard-coded demo-account
+  auth bypass. No other auth behavior or tests were changed. Every account now
+  uses existing verification, current-role and session-version checks.
+- Final combined backend: **277 tests, 24 suites passed; zero failures**.
+  Issue #13 alone: **260 tests, 22 suites passed; zero failures**. Frontend build
+  passes. The focused leaderboard browser test now also exercises successful,
+  late and failed verification to guard this exact merge conflict. Provider
+  replies for that UI test are simulated; no real payments or emails are sent.
+- Existing migration 013 belongs to issue #13 and still requires review/application
+  before deployment; it has NOT been applied to shared Supabase. No new migration,
+  dependency, private configuration edit, or shared database write was added.
+
+Historical PR references and test failures below describe earlier revisions.
+
+
 Issue: https://github.com/NikhitaUppar/SE-project-Team10/issues/36
 
 Branch: `feature/36-donor-leaderboard`, created from updated main `d9c48d1`.

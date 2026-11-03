@@ -20,10 +20,26 @@ async function run() {
     browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : undefined), headless: true });
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await context.newPage(); page.setDefaultTimeout(15000);
-    let fail = false, delay = 500, donorRequests = 0;
+    let fail = false, delay = 500, donorRequests = 0, checkoutMode = null;
+    const pageErrors = [];
+    page.on('pageerror', error => pageErrors.push(error.message));
     await page.route('**/api/**', async route => {
       const url = new URL(route.request().url());
-      const headers = { 'access-control-allow-origin': 'http://localhost:5173' };
+      const headers = { 'access-control-allow-origin': 'http://localhost:5173',
+        'access-control-allow-headers': 'authorization,content-type', 'access-control-allow-methods': 'GET,POST,OPTIONS' };
+      if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+      // Exercise the shared UI callback without making a provider payment. SQL
+      // settlement/signature behavior is covered by the expiry integration tests.
+      if (checkoutMode && url.pathname.endsWith('/create-order')) {
+        return route.fulfill({ status: 200, headers, json: { order_id: 'order_browser_fixture', currency: 'INR' } });
+      }
+      if (checkoutMode && url.pathname.endsWith('/verify')) {
+        if (checkoutMode === 'failure') return route.fulfill({ status: 503, headers, json: { error: 'Fixture verification unavailable' } });
+        const late = checkoutMode === 'late';
+        if (!late) await f.add({ donor: 0, amount: 100 });
+        await f.db.query('UPDATE public.campaigns SET raised_amount=777,status=$1 WHERE id=$2', [late ? 'closed' : 'active', f.ids.campaign]);
+        return route.fulfill({ status: 200, headers, json: { receipt_sent: true, reconciliation_required: late } });
+      }
       if (url.pathname.endsWith('/donors')) {
         donorRequests++;
         if (delay) await new Promise(resolve => setTimeout(resolve, delay));
@@ -83,6 +99,28 @@ async function run() {
     await page.goto(url); await top.waitFor(); await page.reload(); await top.waitFor();
     assert.equal(await top.locator('li').count(), 5);
     console.log('PASS: empty state, campaign isolation, and persisted results after reload');
+
+    stage = 'shared payment callback after conflict resolution';
+    for (const mode of ['success', 'late', 'failure']) {
+      checkoutMode = mode;
+      await f.db.query("UPDATE public.campaigns SET status='active',raised_amount=10 WHERE id=$1", [f.ids.campaign]);
+      await page.reload(); await top.waitFor();
+      const requestsBefore = donorRequests;
+      await page.locator('form button[type="submit"]').click();
+      await page.getByRole('button', { name: /Pay ₹100/ }).click();
+      if (mode === 'failure') {
+        await page.getByText('Fixture verification unavailable', { exact: true }).waitFor();
+        assert.equal(await page.getByRole('heading', { name: 'Thank you!' }).count(), 0);
+        assert.equal(donorRequests, requestsBefore);
+      } else {
+        await page.getByText('₹777', { exact: true }).waitFor();
+        await top.locator('li').first().filter({ hasText: '₹400' }).waitFor();
+        assert.equal(donorRequests, requestsBefore + 1);
+        if (mode === 'late') await page.getByText(/payment was received after this campaign stopped accepting donations/).waitFor();
+      }
+    }
+    assert.deepEqual(pageErrors, []);
+    console.log('PASS: authoritative totals and donor refresh coexist; late captures do not inflate donors; failed verification does not claim success');
     await context.close();
   } catch (error) { throw new Error(`Leaderboard browser check failed at ${stage}: ${error.message}`); }
   finally {
