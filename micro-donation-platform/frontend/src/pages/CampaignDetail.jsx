@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
+import CampaignDonors from '../components/campaign/CampaignDonors';
 import CampaignUpdates from '../components/campaign/CampaignUpdates';
 import ShareButton from '../components/campaign/ShareButton';
 import RazorpayCheckoutModal from '../components/campaign/RazorpayCheckoutModal';
@@ -19,10 +20,8 @@ export default function CampaignDetail() {
 
   const [campaign, setCampaign]         = useState(null);
   const [loading, setLoading]           = useState(true);
+  const [donorRefresh, setDonorRefresh] = useState(0);
   const [campaignError, setCampaignError] = useState('');
-  const [donations, setDonations]       = useState([]);
-  const [donationsLoading, setDonationsLoading] = useState(true);
-  const [donationsError, setDonationsError]     = useState('');
   const [amount, setAmount]             = useState(100);
   const [isAnonymous, setIsAnonymous]   = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -50,19 +49,6 @@ export default function CampaignDetail() {
 
     fetchCampaign();
     return () => controller.abort();
-  }, [id]);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const res = await api.get(`/campaigns/${id}/donations`);
-        if (active) { setDonations(res.data.donations || []); setDonationsError(''); }
-      } catch (err) {
-        if (active) setDonationsError(err.response?.data?.error || 'Could not load recent donations.');
-      } finally { if (active) setDonationsLoading(false); }
-    })();
-    return () => { active = false; };
   }, [id]);
 
   const handleDonate = async (e) => {
@@ -114,8 +100,7 @@ export default function CampaignDetail() {
       // increase a closed campaign's displayed raised total.
       const detail = await api.get(`/campaigns/${id}`);
       setCampaign(detail.data);
-      const history = await api.get(`/campaigns/${id}/donations`);
-      setDonations(history.data.donations || []);
+      setDonorRefresh(value => value + 1);
     } catch (verificationError) {
       setError(verificationError.response?.data?.error || 'Unable to confirm payment. Please retry verification before paying again.');
     }
@@ -166,7 +151,7 @@ export default function CampaignDetail() {
 
       <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:24 }} className="campaign-detail-grid">
         {/* Main info */}
-        <div style={{ gridColumn:'1', display:'flex', flexDirection:'column', gap:20 }}>
+        <div style={{ gridColumn:'1', minWidth:0, display:'flex', flexDirection:'column', gap:20 }}>
           <div style={{ background:'#fff', border:'1.5px solid #FED7AA', borderRadius:18, padding:'28px 28px 24px', boxShadow:'0 2px 16px rgba(194,65,12,0.07)' }}>
             {/* Badges */}
             <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:16 }}>
@@ -260,42 +245,7 @@ export default function CampaignDetail() {
           </div>
 
           <CampaignUpdates key={campaign.id} campaign={campaign} />
-
-          {/* Recent donations */}
-          <div style={{ background:'#fff', border:'1.5px solid #FED7AA', borderRadius:18, padding:'24px 28px', boxShadow:'0 2px 12px rgba(194,65,12,0.05)' }}>
-            <h2 style={{ fontWeight:800, color:'#7C2D12', fontSize:'1rem', margin:'0 0 16px' }}>Recent Supporters</h2>
-            {donationsLoading && <p style={{ color:'#A16207', fontSize:'0.875rem' }}>Loading…</p>}
-            {!donationsLoading && donationsError && <p style={{ color:'#B91C1C', fontSize:'0.875rem' }}>{donationsError}</p>}
-            {!donationsLoading && !donationsError && donations.length === 0 && (
-              <p style={{ color:'#92400E', fontSize:'0.875rem', fontStyle:'italic' }}>
-                No donations yet. Be the first to support this campaign! 🙌
-              </p>
-            )}
-            {!donationsLoading && !donationsError && donations.length > 0 && (
-              <div style={{ display:'flex', flexDirection:'column', gap:1 }}>
-                {donations.map((d, i) => (
-                  <div key={d.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 0', borderBottom: i < donations.length-1 ? '1px solid #FEF3C7' : 'none' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                      <div style={{ width:32, height:32, borderRadius:'50%', background:'linear-gradient(135deg,#FFF7ED,#FED7AA)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.9rem', flexShrink:0 }}>
-                        {d.is_anonymous ? '🕵️' : '💛'}
-                      </div>
-                      <div>
-                        <p style={{ fontWeight:700, color:'#1C0A00', fontSize:'0.875rem', margin:0 }}>
-                          {d.is_anonymous ? 'Anonymous' : d.donor_name || 'Donor'}
-                        </p>
-                        <p style={{ color:'#A16207', fontSize:'0.72rem', margin:0 }}>
-                          {d.created_at ? new Date(d.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : ''}
-                        </p>
-                      </div>
-                    </div>
-                    <span style={{ fontWeight:800, color:'#C2410C', fontSize:'0.95rem', fontVariantNumeric:'tabular-nums' }}>
-                      ₹{Number(d.amount||0).toLocaleString('en-IN')}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <CampaignDonors key={id} campaignId={id} refreshKey={donorRefresh} />
         </div>
 
         {/* Sticky donation card */}
