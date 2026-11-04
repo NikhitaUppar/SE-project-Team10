@@ -54,8 +54,8 @@ async function run() {
     await owner.page.goto(url);
     await owner.page.getByText('First update', { exact: true }).waitFor();
     await owner.page.getByText('Books for local students', { exact: true }).waitFor();
-    await owner.page.getByRole('heading', { name: 'Recent Supporters' }).waitFor();
-    await owner.page.getByText('donor', { exact: true }).waitFor();
+    await owner.page.getByRole('heading', { name: 'Recent Donations' }).waitFor();
+    await owner.page.getByRole('list', { name: 'Recent donations', exact: true }).getByText('donor', { exact: true }).waitFor();
     assert.equal(await owner.page.getByRole('button', { name: /share/i }).count(), 1);
     await owner.page.getByText(/\d+ days left/, { exact: false }).first().waitFor();
     console.log('PASS: sharing, countdown, impact statements, and recent supporters preserved');
