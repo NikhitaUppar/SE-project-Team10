@@ -4,6 +4,7 @@ import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import ShareButton from '../components/campaign/ShareButton';
 import { getRemainingDaysText } from '../utils/dateUtils';
+import MockRazorpay from '../components/common/MockRazorpay';
 
 const PRESET_AMOUNTS = [50, 100, 250, 500];
 
@@ -21,6 +22,7 @@ export default function CampaignDetail() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError]               = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(null);
+  const [razorpayOptions, setRazorpayOptions] = useState(null); // controls mock modal
 
   useEffect(() => {
     (async () => {
@@ -65,11 +67,13 @@ export default function CampaignDetail() {
           const orderId   = response.razorpay_order_id || order_id;
           const signature = response.razorpay_signature || 'dev_test_sig';
           let receiptSent = false;
+          let receiptPreview = null;
           try {
             const v = await api.post('/donations/verify', { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature });
             receiptSent = v.data?.receipt_sent;
+            receiptPreview = v.data?.receipt_preview || null;
           } catch {}
-          setPaymentSuccess({ paymentId, orderId, amount: num, receiptSent });
+          setPaymentSuccess({ paymentId, orderId, amount: num, receiptSent, receiptPreview });
           setCampaign(prev => ({ ...prev, raised_amount: (Number(prev?.raised_amount)||0) + num }));
           setDonations(prev => [{ id: paymentId, amount: num, is_anonymous: Boolean(isAnonymous), status:'completed', created_at: new Date().toISOString(), donor_name: isAnonymous ? 'Anonymous' : (user?.display_name || 'Donor') }, ...prev]);
           setIsSubmitting(false);
@@ -78,11 +82,19 @@ export default function CampaignDetail() {
         theme: { color: '#C2410C' },
         modal: { ondismiss: () => setIsSubmitting(false) },
       };
-      try {
-        const rp = new window.Razorpay(options);
-        rp.on('payment.failed', (r) => { setError(`Payment failed: ${r.error?.description || 'Transaction unsuccessful'}`); setIsSubmitting(false); });
-        rp.open();
-      } catch { options.handler({ razorpay_payment_id: `pay_test_${Date.now()}`, razorpay_order_id: order_id }); }
+      // Dummy mode: skip Razorpay modal and simulate successful payment directly
+      const isDummy = !key_id || key_id.includes('dummy') || key_id.includes('placeholder') || key_id.includes('xxxx');
+      if (isDummy) {
+        // Show our custom mock Razorpay modal
+        setRazorpayOptions(options);
+        setIsSubmitting(false);
+      } else {
+        try {
+          const rp = new window.Razorpay(options);
+          rp.on('payment.failed', (r) => { setError(`Payment failed: ${r.error?.description || 'Transaction unsuccessful'}`); setIsSubmitting(false); });
+          rp.open();
+        } catch { await options.handler({ razorpay_payment_id: `pay_test_${Date.now()}`, razorpay_order_id: order_id }); }
+      }
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Failed to initialize payment.');
       setIsSubmitting(false);
@@ -277,6 +289,17 @@ export default function CampaignDetail() {
                     <span style={{ color:'#14532D', fontWeight:700 }}>✅ Emailed</span>
                   </div>
                 </div>
+                {paymentSuccess.receiptPreview && (
+                  <a href={paymentSuccess.receiptPreview} target="_blank" rel="noopener noreferrer"
+                    style={{
+                      display:'block', width:'100%', textAlign:'center', marginBottom:12,
+                      background:'linear-gradient(135deg,#4338ca,#6366f1)', color:'#fff',
+                      borderRadius:8, padding:'10px', fontWeight:700, fontSize:'0.82rem',
+                      textDecoration:'none', boxShadow:'0 2px 10px rgba(99,102,241,0.3)',
+                    }}>
+                    📧 View Receipt Email →
+                  </a>
+                )}
                 <button onClick={() => setPaymentSuccess(null)} style={{ color:'#EA580C', background:'none', border:'none', cursor:'pointer', fontWeight:700, fontSize:'0.85rem', fontFamily:'inherit' }}>
                   Make another donation
                 </button>
@@ -358,6 +381,14 @@ export default function CampaignDetail() {
           .donation-card-col { grid-column: 2 !important; grid-row: 1 !important; }
         }
       `}</style>
+
+      {/* Mock Razorpay Payment Modal */}
+      {razorpayOptions && (
+        <MockRazorpay
+          options={razorpayOptions}
+          onClose={() => { setRazorpayOptions(null); setIsSubmitting(false); }}
+        />
+      )}
     </div>
   );
 }

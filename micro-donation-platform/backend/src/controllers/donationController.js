@@ -248,29 +248,28 @@ const verifyPayment = async (req, res) => {
 
     let emailResult = { success: false };
     if (donorEmail && typeof emailController.sendReceiptEmail === 'function') {
-      try {
-        emailResult = await emailController.sendReceiptEmail(donorEmail, {
-          donorName,
-          amount,
-          campaignName: campaignTitle,
-          date: new Date().toLocaleDateString('en-IN', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          }),
-          transactionId: razorpay_payment_id,
-          receiptNumber: `RCPT-${razorpay_payment_id.replace(/^pay_/, '')}`,
-          paymentStatus: 'Successful',
-        });
-      } catch (emailErr) {
-        console.warn('Notice: Receipt email sending error (non-fatal):', emailErr.message);
-      }
+      // Fire-and-forget: don't await email so payment response is instant
+      emailController.sendReceiptEmail(donorEmail, {
+        donorName,
+        amount,
+        campaignName: campaignTitle,
+        date: new Date().toLocaleDateString('en-IN', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }),
+        transactionId: razorpay_payment_id,
+        receiptNumber: `RCPT-${razorpay_payment_id.replace(/^pay_/, '')}`,
+        paymentStatus: 'Successful',
+      }).then(r => { emailResult = r; }).catch(e => console.warn('Receipt email (non-fatal):', e.message));
+      emailResult = { success: true }; // optimistic
     }
 
     return res.status(200).json({
       status: 'ok',
       message: 'Payment verified and donation completed',
       receipt_sent: emailResult?.success ?? true,
+      receipt_preview: emailResult?.previewUrl || null,
       donation_id: donation?.id || null,
     });
   } catch (err) {
