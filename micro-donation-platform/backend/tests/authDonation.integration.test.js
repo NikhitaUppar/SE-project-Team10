@@ -56,6 +56,9 @@ jest.mock('../src/config/supabase', () => ({
               const u = Array.from(mockUsers.values()).find((x) => x[col] === val);
               return { data: u ? { ...u } : null, error: null };
             }
+            if (table === 'campaigns') {
+              return { data: mockCampaigns.get(val) || null, error: null };
+            }
             return { data: null, error: null };
           }),
         })),
@@ -138,6 +141,7 @@ describe('Issue #14 — API Integration Tests: Authentication & Donation Flows (
     raised_amount: 12000,
     category: 'Relief',
     status: 'active',
+    deadline: '2099-12-31T00:00:00Z',
   };
 
   beforeEach(() => {

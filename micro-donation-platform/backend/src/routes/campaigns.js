@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { getCampaignDonors } = require('../controllers/campaignDonorsController');
 
 const {
   getCampaigns,
@@ -66,6 +67,7 @@ router.get('/public-stats', getPublicStats); // must be before /:id
 router.get('/:id', getCampaignById);
 router.get('/:id/updates', getCampaignUpdates);
 router.get('/:id/donations', getCampaignDonations);
+router.get('/:id/donors', getCampaignDonors);
 router.get('/:id/stats', authenticate, getCampaignStats);
 router.post('/', authenticate, createCampaign);
 router.post(
