@@ -1,3 +1,4 @@
+   
 name: CI
 
 on:
@@ -38,3 +39,4 @@ jobs:
           cache-dependency-path: micro-donation-platform/frontend/package-lock.json
       - run: npm ci
       - run: npm run build
+

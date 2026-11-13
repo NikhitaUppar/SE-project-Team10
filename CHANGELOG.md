@@ -1,5 +1,94 @@
 # Project change record
 
+## 2026-11-03: Recover issues #13 and #36 after rewritten main
+
+- Updated local main to `30147ca`, retaining backup branches and original PR work.
+- Reapplied feature-only changes onto current history; resolved CampaignDetail,
+  README and CHANGELOG overlap while retaining accounting and donor refresh.
+- Added browser coverage for the shared successful/late/failed payment callback.
+- Separately approved auth fix removes the demo-account bypass (12 lines).
+- Combined backend: 277 tests / 24 suites pass; frontend build passes.
+- No shared database changes. Issue #13's existing migration remains unapplied.
+
+
+## 2026-11-03: PR #53 conflict resolution
+
+- Integrated main `8816d6d`, including merged progress updates, video support,
+  and campaign-start navigation, into the existing issue #36 PR branch.
+- Resolved the four conflicting files while keeping both progress and donors
+  sections, both guide links, new upload/navigation changes, and existing checkout.
+- Frontend build and combined-page browser checks passed. Full backend: 235
+  passed / 12 inherited login failures, with no auth or payment-controller change.
+- Updated browser fixtures/selectors for the combined timeline and donor lists.
+  No shared database writes or private environment changes.
+
+## 2026-11-02: Issue #36 campaign donor leaderboard
+
+- Updated main at `d9c48d1` and created `feature/36-donor-leaderboard`.
+  Unmerged issue #12/#13 branches remain separate and preserved.
+- Added a public top/recent-donors API using completed records, privacy masking,
+  exact paise totals, deterministic ties, provider deduplication, and keyset paging.
+- Replaced the old supporters block with Top Donors and Recent Donations, INR,
+  relative timestamps, responsive layout, loading/error/retry, and refresh after
+  existing payment verification. No payment/authentication flow changes.
+- 13 PostgreSQL/formatting scenarios, frontend build, and isolated Chrome passed.
+  Full backend: 234 passed / 12 failed; all failures are in unchanged main login
+  tests. The feature guide records those inherited failures.
+- No migration, new dependency, private environment change, shared write, real
+  payment, or email. User approval is required before push/PR creation.
+
+## 2026-11-03: PR #52 conflict resolution
+
+- Integrated main `8816d6d`; resolved campaign detail and documentation conflicts.
+- Preserved expiry/donation restrictions, merged progress updates, video uploads,
+  campaign-start navigation, error handling, and both documentation histories.
+- Frontend build and expiry/progress browser walkthroughs passed. Full backend:
+  248 passed / 12 inherited login failures. Tests use isolated PostgreSQL; the
+  existing required migration remains unapplied remotely.
+- No shared writes or private environment changes; PR title and Issue #13 unchanged.
+
+## 2026-11-02: Issue #13 integration with current main
+
+- Preserved the existing feature branch and fast-forwarded main to `d9c48d1`.
+- Reused the lifecycle service, explicit midnight scheduler, startup catch-up,
+  and availability checks; resolved conflicts with newer checkout/campaign code.
+- Added duplicate scheduler protection and transactional payment reconciliation
+  so captured payments after closure are recorded without crediting closed totals.
+- Generated migration `013_campaign_expiry_payments.sql`; tested it in isolated
+  PostgreSQL only. It has NOT been applied to shared Supabase.
+- 21 PostgreSQL scenarios, frontend build, and isolated browser checks passed.
+  Full backend: 247 passed / 12 failed; main independently reproduces all 12
+  login-test failures. Auth middleware and login tests are unchanged.
+- Preserved private environments, teammates' changes, and separate issue #12.
+  No shared writes/payments/emails were used for this task. Await push approval.
+
+## 2026-10-26: Issue #13 auto-close campaigns past deadline (FR-10)
+
+- Created `feature/13-auto-close-campaigns` from fetched, fast-forwarded main
+  at `509d358`. The unmerged issue #12 branch and PR were preserved.
+- Implemented a single conditional status-only update for active campaigns
+  strictly past their timezone-aware deadlines. Already-closed and other
+  non-active statuses, campaign details, donations, and progress records stay intact.
+- Replaced the scheduler TODO with daily midnight execution in Asia/Kolkata,
+  optional `CAMPAIGN_CRON_TIMEZONE`, startup catch-up, overlap prevention,
+  sanitized failure logging, and retry on the next daily run.
+- Centralized lifecycle rules and exposed effective closed/availability states.
+  Active browsing filters expired rows before pagination; new donation orders
+  always check status/deadline and fail closed when the database is unavailable.
+  Existing captured-payment confirmation/webhook bookkeeping remains unchanged.
+- Updated detail/card donation controls to use backend availability. API checks
+  still block a stale browser page after a deadline has passed.
+- Added policy, scheduler, startup, PostgreSQL integration, and optional browser
+  tests. Validation passed 17 suites / 210 Jest tests, 10 child PostgreSQL cases,
+  frontend build, and isolated Chrome checks. No lint command is configured.
+- No migration, new dependency, private environment change, real payment/email,
+  or shared campaign update was needed. The live backend was stopped during
+  testing so the new startup catch-up would not mutate team records unexpectedly.
+- See `micro-donation-platform/backend/ISSUE_13_AUTO_CLOSE.md` for the complete
+  file review, boundary/financial rules, deployment requirements, and PR draft
+  using the exact issue title. The feature branch push is authorized; merging
+  requires the user's confirmation.
+
 ## 2026-11-02: PR #39 conflict resolution
 
 - Integrated main at `e1d4ab4` into the issue #12 feature branch and resolved

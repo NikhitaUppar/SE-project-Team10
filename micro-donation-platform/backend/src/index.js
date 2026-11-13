@@ -1,14 +1,13 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const cron = require('node-cron');
+const { startCampaignExpiryJob } = require('./jobs/campaignExpiryJob');
 
 const authRoutes = require('./routes/auth');
 const campaignRoutes = require('./routes/campaigns');
 const donationRoutes = require('./routes/donations');
 const userRoutes = require('./routes/users');
 const adminRoutes = require('./routes/admin');
-const { closePastDeadlineCampaigns } = require('./controllers/campaignController');
 
 const app = express();
 
@@ -41,10 +40,7 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // ── Cron: auto-close expired campaigns (runs daily at midnight) ──────────────
 if (process.env.NODE_ENV !== 'test') {
-  cron.schedule('0 0 * * *', async () => {
-    console.log('[CRON] Checking for expired campaigns...');
-    await closePastDeadlineCampaigns();
-  });
+  startCampaignExpiryJob();
 }
 
 // ── Error handler ────────────────────────────────────────────────────────────
