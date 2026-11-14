@@ -132,7 +132,7 @@ npm test -- tests/authDonation.integration.test.js
 | **Automated Tests (Payment suites)** | 50 |
 | **Automated Tests Passed** | 50 |
 | **Real Email Receipt Verified** | ✅ Yes — roopeshp057@gmail.com |
-| **Screenshots Collected** | ✅ 3 screenshots in /screenshots folder |
+| **Screenshots Directory** | `docs/testing/Roopesh/screenshots/` (ready for manual testing captures) |
 
 ---
 
@@ -150,8 +150,4 @@ From `npm test -- tests/razorpay.test.js tests/receipt_email.test.js`:
 
 ## 5. Screenshots Evidence
 
-| Screenshot | Description |
-|---|---|
-| `screenshots/payment_modal_ui.jpg` | Razorpay mock modal UI open during testing |
-| `screenshots/payment_method_selection.jpg` | Payment method selection screen (UPI/Card/NetBanking) |
-| `screenshots/payment_success_thankyou.jpg` | Thank You screen after successful payment |
+Manual testing screenshots will be saved directly into `docs/testing/Roopesh/screenshots/` during live review and presentation.
