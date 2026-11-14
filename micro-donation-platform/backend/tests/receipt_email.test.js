@@ -254,6 +254,93 @@ describe('Issue #8 - Donation Receipt Email on Success (FR-13)', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('ok');
+      expect(res.body.receipt_sent).toBe(false);
+    });
+
+    it('should return receipt_sent: false when emailController returns { success: false }', async () => {
+      sendReceiptSpy.mockResolvedValueOnce({ success: false, reason: 'Invalid or missing email address' });
+
+      const orderId = 'order_test_email_unsuccessful_result';
+      const paymentId = 'pay_test_email_unsuccessful_result_789';
+      const validSignature = crypto
+        .createHmac('sha256', secret)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+
+      const res = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('ok');
+      expect(res.body.payment_id).toBe(paymentId);
+      expect(res.body.receipt_sent).toBe(false);
+    });
+
+    it('should return receipt_sent: true only when emailController returns { success: true }', async () => {
+      sendReceiptSpy.mockResolvedValueOnce({ success: true, messageId: 'msg-success-123' });
+
+      const orderId = 'order_test_email_successful_result';
+      const paymentId = 'pay_test_email_successful_result_101';
+      const validSignature = crypto
+        .createHmac('sha256', secret)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+
+      const res = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('ok');
+      expect(res.body.payment_id).toBe(paymentId);
+      expect(res.body.receipt_sent).toBe(true);
+    });
+
+    it('should reject verification and not mark donation successful when signature verification fails', async () => {
+      const orderId = 'order_test_failed_verification';
+      const paymentId = 'pay_test_failed_verification_404';
+
+      const res = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: 'invalid_forged_sig_value',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/invalid payment signature/i);
+      expect(res.body.status).toBeUndefined();
+      expect(sendReceiptSpy).not.toHaveBeenCalled();
+    });
+
+    it('should reject verification and not mark donation successful when payment ID is missing', async () => {
+      const orderId = 'order_test_missing_payment_id';
+
+      const res = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_signature: 'valid_looking_signature',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/missing payment verification parameters/i);
+      expect(res.body.status).toBeUndefined();
+      expect(sendReceiptSpy).not.toHaveBeenCalled();
     });
   });
 
