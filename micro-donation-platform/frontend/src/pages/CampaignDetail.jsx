@@ -141,7 +141,7 @@ export default function CampaignDetail() {
   const docFile = campaign?.campaign_files?.find(f => f.file_type === 'application/pdf');
   const imgFile = campaign?.campaign_files?.find(f => f.file_type?.startsWith('image/'));
   const supportingDocUrl = docFile?.file_url || null;
-  const thumbnailUrl = imgFile?.file_url || null;
+  const thumbnailUrl = imgFile?.file_url || campaign?.image_url || null;
 
   return (
     <div style={{ maxWidth: 1080, margin: '0 auto', padding: '24px max(16px, env(safe-area-inset-left, 0px)) 64px' }}>
