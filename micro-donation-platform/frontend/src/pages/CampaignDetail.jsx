@@ -63,20 +63,70 @@ export default function CampaignDetail() {
         name: 'MicroDonate', description: `Donation to ${campaign?.title || 'Cause'}`,
         order_id,
         handler: async (response) => {
-          const paymentId = response.razorpay_payment_id || `pay_mock_${Date.now()}`;
-          const orderId   = response.razorpay_order_id || order_id;
-          const signature = response.razorpay_signature || 'dev_test_sig';
-          let receiptSent = false;
-          let receiptPreview = null;
+          // Validate that payment ID is returned by payment gateway
+          if (!response || !response.razorpay_payment_id) {
+            setError('Payment verification failed: No payment ID received from payment provider.');
+            setIsSubmitting(false);
+            return;
+          }
+
+          const rawPaymentId = response.razorpay_payment_id;
+          const orderId      = response.razorpay_order_id || order_id;
+          const signature    = response.razorpay_signature;
+
+          if (!signature) {
+            setError('Payment verification failed: Missing payment verification signature.');
+            setIsSubmitting(false);
+            return;
+          }
+
           try {
-            const v = await api.post('/donations/verify', { razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature });
-            receiptSent = v.data?.receipt_sent;
-            receiptPreview = v.data?.receipt_preview || null;
-          } catch {}
-          setPaymentSuccess({ paymentId, orderId, amount: num, receiptSent, receiptPreview });
-          setCampaign(prev => ({ ...prev, raised_amount: (Number(prev?.raised_amount)||0) + num }));
-          setDonations(prev => [{ id: paymentId, amount: num, is_anonymous: Boolean(isAnonymous), status:'completed', created_at: new Date().toISOString(), donor_name: isAnonymous ? 'Anonymous' : (user?.display_name || 'Donor') }, ...prev]);
-          setIsSubmitting(false);
+            // Verify payment on backend before marking donation as successful
+            const v = await api.post('/donations/verify', {
+              razorpay_order_id:   orderId,
+              razorpay_payment_id: rawPaymentId,
+              razorpay_signature:  signature,
+            });
+
+            if (!v || v.status !== 200 || v.data?.status !== 'ok') {
+              throw new Error(v?.data?.error || 'Payment verification failed on server.');
+            }
+
+            // Use the actual verified payment ID returned by the verified payment response
+            const verifiedPaymentId = v.data?.payment_id || v.data?.razorpay_payment_id || rawPaymentId;
+            const receiptSent    = Boolean(v.data?.receipt_sent);
+            const receiptPreview = v.data?.receipt_preview || null;
+
+            // Only mark donation as successful upon verified backend response
+            setPaymentSuccess({
+              paymentId: verifiedPaymentId,
+              orderId,
+              amount: num,
+              receiptSent,
+              receiptPreview,
+            });
+            setCampaign(prev => ({
+              ...prev,
+              raised_amount: (Number(prev?.raised_amount) || 0) + num,
+            }));
+            setDonations(prev => [{
+              id: verifiedPaymentId,
+              amount: num,
+              is_anonymous: Boolean(isAnonymous),
+              status: 'completed',
+              created_at: new Date().toISOString(),
+              donor_name: isAnonymous ? 'Anonymous' : (user?.display_name || 'Donor'),
+            }, ...prev]);
+            setIsSubmitting(false);
+          } catch (verifyErr) {
+            console.error('Payment verification error:', verifyErr);
+            const failureMsg =
+              verifyErr.response?.data?.error ||
+              verifyErr.message ||
+              'Payment verification failed. If your account was debited, verification is pending and your donation will be credited shortly.';
+            setError(`Payment verification failed: ${failureMsg}`);
+            setIsSubmitting(false);
+          }
         },
         prefill: { name: isAnonymous ? 'Anonymous Donor' : user?.display_name || 'Donor', email: user?.email || 'donor@example.com' },
         theme: { color: '#C2410C' },
@@ -93,7 +143,10 @@ export default function CampaignDetail() {
           const rp = new window.Razorpay(options);
           rp.on('payment.failed', (r) => { setError(`Payment failed: ${r.error?.description || 'Transaction unsuccessful'}`); setIsSubmitting(false); });
           rp.open();
-        } catch { await options.handler({ razorpay_payment_id: `pay_test_${Date.now()}`, razorpay_order_id: order_id }); }
+        } catch {
+          setError('Failed to open Razorpay payment window. Please try again.');
+          setIsSubmitting(false);
+        }
       }
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Failed to initialize payment.');
@@ -282,11 +335,15 @@ export default function CampaignDetail() {
                 <div style={{ background:'#FFF7ED', border:'1px solid #FED7AA', borderRadius:10, padding:'14px', textAlign:'left', fontSize:'0.78rem', marginBottom:16 }}>
                   <div style={{ display:'flex', justifyContent:'space-between', gap:8, marginBottom:6 }}>
                     <span style={{ color:'#A16207' }}>Payment ID:</span>
-                    <span style={{ color:'#1C0A00', fontWeight:600, wordBreak:'break-all', fontFamily:'monospace' }}>{paymentSuccess.paymentId}</span>
+                    <span style={{ color:'#1C0A00', fontWeight:600, wordBreak:'break-all', fontFamily:'monospace' }}>
+                      {paymentSuccess.paymentId || 'N/A'}
+                    </span>
                   </div>
                   <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
                     <span style={{ color:'#A16207' }}>Receipt:</span>
-                    <span style={{ color:'#14532D', fontWeight:700 }}>✅ Emailed</span>
+                    <span style={{ color: paymentSuccess.receiptSent ? '#14532D' : '#B45309', fontWeight:700 }}>
+                      {paymentSuccess.receiptSent ? '✅ Emailed' : '⏳ Delivery pending'}
+                    </span>
                   </div>
                 </div>
                 {paymentSuccess.receiptPreview && (
