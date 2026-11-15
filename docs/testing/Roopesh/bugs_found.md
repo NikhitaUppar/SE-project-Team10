@@ -12,6 +12,9 @@
 | BUG-01 | Medium | Razorpay Payments | Fixed |
 | BUG-02 | Low | Donation Receipts | Fixed |
 | BUG-03 | Low | Payment UI | Fixed |
+| BUG-04 | High | Payment Verification (Frontend) | Fixed |
+| BUG-05 | High | Payment Verification (Backend) | Fixed |
+| BUG-06 | Medium | Donation Receipts UI | Fixed |
 
 ---
 
@@ -64,8 +67,56 @@
 
 ---
 
+## BUG-04 — Frontend Silent Catch Block Hiding Payment Verification Errors
+
+| Field | Detail |
+|---|---|
+| **Bug ID** | BUG-04 |
+| **Severity** | High |
+| **Feature** | Payment Verification (Frontend) / `CampaignDetail.jsx` |
+| **Description** | `CampaignDetail.jsx` contained an empty `catch {}` block around backend payment verification. When payment verification failed on the server (e.g. invalid signature, network timeout, or DB failure), the failure was swallowed, leaving the user with an ambiguous state or claiming payment success based only on client checkout. Submit button could also be clicked multiple times during verification. |
+| **Steps to Reproduce** | 1. Cause backend verification endpoint to return 400 or 500. 2. Observe frontend behaviour. |
+| **Expected** | User sees an explicit, informative error alert banner and the donation is never marked as completed. Duplicate clicks are blocked during verification. |
+| **Actual** | Errors were silenced; duplicate requests could be fired. |
+| **Fix Applied** | ✅ Removed empty catch block. Implemented descriptive error banner, added `isVerifying` state to disable submit button with a `Verifying payment…` spinner, and ensured `setPaymentSuccess` is called strictly after backend responds with HTTP 200 `status: 'ok'`. |
+| **Fixed By** | Roopesh |
+
+---
+
+## BUG-05 — Backend `verifyPayment` Reporting Success When Database Persistence Fails
+
+| Field | Detail |
+|---|---|
+| **Bug ID** | BUG-05 |
+| **Severity** | High |
+| **Feature** | Payment Verification (Backend) / `donationController.js` |
+| **Description** | In `verifyPayment`, database errors during the donation update query were logged to console but execution continued, returning HTTP 200 `message: 'Payment verified and donation completed'` even when Supabase failed to persist the completed status or updated 0 rows. |
+| **Steps to Reproduce** | 1. Simulate DB connection error or abort during `/api/donations/verify`. 2. Observe API response. |
+| **Expected** | Return HTTP 500 and halt before dispatching receipt emails or reporting donation completion. |
+| **Actual** | API returned HTTP 200 with false positive donation completion. |
+| **Fix Applied** | ✅ Added strict verification check `if (updateErr || !updated)` returning HTTP 500 `{ error: 'Failed to update donation status in database' }`. Added production guard ensuring DB availability before verification. Preserved idempotency with `processedOrders` and status checks. |
+| **Fixed By** | Roopesh |
+
+---
+
+## BUG-06 — Frontend Displaying Hardcoded "Emailed" Receipt Status
+
+| Field | Detail |
+|---|---|
+| **Bug ID** | BUG-06 |
+| **Severity** | Medium |
+| **Feature** | Donation Receipts UI / `CampaignDetail.jsx` |
+| **Description** | The donation thank-you card rendered receipt status as `Emailed` unconditionally, regardless of whether the email operation succeeded, failed, or was pending. |
+| **Steps to Reproduce** | 1. Disable SMTP or provide an invalid email. 2. Complete donation. 3. Observe frontend card says `Emailed`. |
+| **Expected** | Card displays `Emailed` (green) if `receiptSent` is true, and `Pending` (amber) if false or null. |
+| **Actual** | Unconditionally reported receipt as emailed. |
+| **Fix Applied** | ✅ Bound receipt badge to `Boolean(paymentSuccess?.receiptSent) ? 'Emailed' : 'Pending'`. Backend ensures `receipt_sent` is boolean and accurately reflects email controller delivery status. |
+| **Fixed By** | Roopesh |
+
+---
+
 ## Notes
 
-- No bugs were found in the core backend payment logic (Razorpay order creation, HMAC signature verification, webhook handling).
-- All 50 relevant automated backend tests pass.
-- All bugs found were in the development/testing environment configuration and frontend payment UI, not in production backend logic.
+- All 6 identified issues (including review items from PR #58) have been resolved and verified with automated test suites.
+- All 15 backend test suites pass cleanly (224/224 tests passing).
+- Zero merge conflicts between working branch `test/manual-testing-roopesh` and target branch `feature/15-final-documentation`.

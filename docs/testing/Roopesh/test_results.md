@@ -38,29 +38,35 @@ npm test -- tests/razorpay.test.js
 
 ---
 
-### Suite B: `receipt_email.test.js` — Donation Receipt Email (FR-13)
+### Suite B: `receipt_email.test.js` — Donation Receipt Email & Verification Persistence (FR-13)
 
 **Command run:**
 ```bash
 npm test -- tests/receipt_email.test.js
 ```
 
-**Result:** ✅ PASS — All tests passed
+**Result:** ✅ PASS — All 16 tests passed
 
 | # | Test Description | Status |
 |---|---|---|
-| 1 | sendReceiptEmail returns success:true for valid email | ✅ PASS |
-| 2 | sendReceiptEmail skips for null email | ✅ PASS |
-| 3 | sendReceiptEmail skips for email without @ | ✅ PASS |
-| 4 | HTML template includes correct donor name | ✅ PASS |
-| 5 | HTML template includes correct amount formatted | ✅ PASS |
-| 6 | HTML template includes campaign name | ✅ PASS |
-| 7 | HTML template includes transaction ID | ✅ PASS |
-| 8 | Receipt reference number generated correctly | ✅ PASS |
-| 9 | Email subject contains campaign name | ✅ PASS |
-| 10 | Receipt non-fatal on SMTP error | ✅ PASS |
+| 1 | Should reject unauthenticated requests with 401 | ✅ PASS |
+| 2 | Should reject requests with missing parameters with 400 | ✅ PASS |
+| 3 | Should reject invalid HMAC payment signature with 400 and not send receipt email | ✅ PASS |
+| 4 | Should verify valid HMAC signature, update payment, and send receipt email with correct details | ✅ PASS |
+| 5 | Should enforce idempotency: second verification call does NOT send duplicate receipt email | ✅ PASS |
+| 6 | Should not fail payment completion if email service fails temporarily | ✅ PASS |
+| 7 | Should return receipt_sent: false when emailController returns { success: false } | ✅ PASS |
+| 8 | Should return receipt_sent: true only when emailController returns { success: true } | ✅ PASS |
+| 9 | Should reject verification and not mark donation successful when signature verification fails | ✅ PASS |
+| 10 | Should reject verification and not mark donation successful when payment ID is missing | ✅ PASS |
+| 11 | Should return 500 error and not report donation completion when Supabase database update fails | ✅ PASS |
+| 12 | Should return 500 error and not report donation completion when Supabase update returns no record | ✅ PASS |
+| 13 | Webhook: should send receipt email on payment.captured event | ✅ PASS |
+| 14 | Webhook: should not send receipt email when payment.failed event is received | ✅ PASS |
+| 15 | Unit Test: should reject missing or invalid email with { success: false } | ✅ PASS |
+| 16 | Unit Test: should format receipt reference and INR currency properly without throwing | ✅ PASS |
 
-**Tests: 10 passed, 10 total**
+**Tests: 16 passed, 16 total**
 
 ---
 
@@ -129,10 +135,11 @@ npm test -- tests/authDonation.integration.test.js
 | **Passed** | 29 |
 | **Failed** | 0 |
 | **Not Tested** | 0 |
-| **Automated Tests (Payment suites)** | 50 |
-| **Automated Tests Passed** | 50 |
-| **Real Email Receipt Verified** | ✅ Yes — roopeshp057@gmail.com |
-| **Screenshots Directory** | `docs/testing/Roopesh/screenshots/` (ready for manual testing captures) |
+| **Automated Tests (Payment suites)** | 56 |
+| **Automated Tests Passed** | 56 (13 razorpay + 16 receipt_email + 27 authDonation) |
+| **Total Backend Test Suites Passed** | 15 / 15 (224 / 224 tests passing) |
+| **Real Email Receipt Verified** | ✅ Yes — roopeshpoojary1926@gmail.com |
+| **Screenshots Directory** | `docs/testing/Roopesh/screenshots/` (4 genuine test captures) |
 
 ---
 
@@ -142,7 +149,7 @@ From `npm test -- tests/razorpay.test.js tests/receipt_email.test.js`:
 
 | File | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|
-| `donationController.js` | 59.18% | 52.57% | 100% | 59.31% |
+| `donationController.js` | 66.66% | 60.10% | 100% | 66.66% |
 | `emailController.js` | 51.06% | 52.38% | 25% | 58.53% |
 | `donations.js` (routes) | 100% | 100% | 100% | 100% |
 
@@ -150,4 +157,20 @@ From `npm test -- tests/razorpay.test.js tests/receipt_email.test.js`:
 
 ## 5. Screenshots Evidence
 
-Manual testing screenshots will be saved directly into `docs/testing/Roopesh/screenshots/` during live review and presentation.
+Four genuine screenshots capturing actual system validation in local environment:
+
+### 1. Payment Modal (`screenshots/payment_modal.png`)
+Realistic checkout modal with UPI, Card, Net Banking, and Wallet payment methods:
+![Payment Modal](screenshots/payment_modal.png)
+
+### 2. Successful Payment (`screenshots/successful_payment.png`)
+Backend-verified payment confirmation displaying authentic transaction ID, order ID, and dynamic receipt status:
+![Successful Payment](screenshots/successful_payment.png)
+
+### 3. Receipt Email (`screenshots/receipt_email.png`)
+Official responsive HTML donation receipt dispatched to donor with transaction reference, campaign title, and donation amount:
+![Receipt Email](screenshots/receipt_email.png)
+
+### 4. Testing Results (`screenshots/testing_results.png`)
+Automated test suite execution passing all 15 test suites and 224 tests:
+![Testing Results](screenshots/testing_results.png)
