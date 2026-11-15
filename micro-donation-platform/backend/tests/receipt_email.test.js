@@ -414,6 +414,117 @@ describe('Issue #8 - Donation Receipt Email on Success (FR-13)', () => {
       expect(sendReceiptSpy).not.toHaveBeenCalled();
       expect(processedOrders.has(orderId)).toBe(false);
     });
+
+    it('should return receipt_sent: false on email failure and maintain receipt_sent: false on subsequent duplicate verification', async () => {
+      sendReceiptSpy.mockResolvedValueOnce({ success: false, reason: 'SMTP server unreachable' });
+
+      const orderId = 'order_test_email_fail_idempotent';
+      const paymentId = 'pay_test_email_fail_idempotent_1';
+      const validSignature = crypto
+        .createHmac('sha256', secret)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+
+      // First verification call: email fails
+      const res1 = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      expect(res1.status).toBe(200);
+      expect(res1.body.status).toBe('ok');
+      expect(res1.body.receipt_sent).toBe(false);
+      expect(sendReceiptSpy).toHaveBeenCalledTimes(1);
+
+      // Second verification call (duplicate): should preserve false, never falsely claim delivered
+      const res2 = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      expect(res2.status).toBe(200);
+      expect(res2.body.already_processed).toBe(true);
+      expect(res2.body.receipt_sent).toBe(false);
+      // Ensure no duplicate email dispatch
+      expect(sendReceiptSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return receipt_sent: true on email success and maintain receipt_sent: true on subsequent duplicate verification', async () => {
+      sendReceiptSpy.mockResolvedValueOnce({ success: true, messageId: 'msg-success-idempotent-999' });
+
+      const orderId = 'order_test_email_success_idempotent';
+      const paymentId = 'pay_test_email_success_idempotent_2';
+      const validSignature = crypto
+        .createHmac('sha256', secret)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+
+      // First verification call: email succeeds
+      const res1 = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      expect(res1.status).toBe(200);
+      expect(res1.body.status).toBe('ok');
+      expect(res1.body.receipt_sent).toBe(true);
+      expect(sendReceiptSpy).toHaveBeenCalledTimes(1);
+
+      // Second verification call (duplicate): should maintain true without duplicate dispatch
+      const res2 = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      expect(res2.status).toBe(200);
+      expect(res2.body.already_processed).toBe(true);
+      expect(res2.body.receipt_sent).toBe(true);
+      // Ensure no duplicate email dispatch
+      expect(sendReceiptSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should confirm payment remains completed and persisted when email delivery rejects with an exception', async () => {
+      sendReceiptSpy.mockRejectedValueOnce(new Error('Connection reset by peer during TLS handshake'));
+
+      const orderId = 'order_test_email_exception_completed';
+      const paymentId = 'pay_test_email_exception_completed_3';
+      const validSignature = crypto
+        .createHmac('sha256', secret)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+
+      const res = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      // Payment itself must succeed (HTTP 200 status 'ok')
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('ok');
+      expect(res.body.message).toMatch(/payment verified and donation completed/i);
+      // Email must be accurately reported as not delivered
+      expect(res.body.receipt_sent).toBe(false);
+    });
   });
 
   describe('2. Webhook Receipt Handling: POST /api/donations/webhook', () => {

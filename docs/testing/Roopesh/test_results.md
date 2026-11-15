@@ -65,8 +65,11 @@ npm test -- tests/receipt_email.test.js
 | 14 | Webhook: should not send receipt email when payment.failed event is received | ✅ PASS |
 | 15 | Unit Test: should reject missing or invalid email with { success: false } | ✅ PASS |
 | 16 | Unit Test: should format receipt reference and INR currency properly without throwing | ✅ PASS |
+| 17 | Should return receipt_sent: false on email failure and maintain receipt_sent: false on subsequent duplicate verification | ✅ PASS |
+| 18 | Should return receipt_sent: true on email success and maintain receipt_sent: true on subsequent duplicate verification | ✅ PASS |
+| 19 | Should confirm payment remains completed and persisted when email delivery rejects with an exception | ✅ PASS |
 
-**Tests: 16 passed, 16 total**
+**Tests: 19 passed, 19 total**
 
 ---
 
@@ -135,9 +138,9 @@ npm test -- tests/authDonation.integration.test.js
 | **Passed** | 29 |
 | **Failed** | 0 |
 | **Not Tested** | 0 |
-| **Automated Tests (Payment suites)** | 56 |
-| **Automated Tests Passed** | 56 (13 razorpay + 16 receipt_email + 27 authDonation) |
-| **Total Backend Test Suites Passed** | 15 / 15 (224 / 224 tests passing) |
+| **Automated Tests (Payment suites)** | 59 |
+| **Automated Tests Passed** | 59 (13 razorpay + 19 receipt_email + 27 authDonation) |
+| **Total Backend Test Suites Passed** | 15 / 15 (227 / 227 tests passing) |
 | **Real Email Receipt Verified** | ✅ Yes — roopeshpoojary1926@gmail.com |
 | **Screenshots Directory** | `docs/testing/Roopesh/screenshots/` (4 genuine test captures) |
 
@@ -172,5 +175,5 @@ Official responsive HTML donation receipt dispatched to donor with transaction r
 ![Receipt Email](screenshots/receipt_email.png)
 
 ### 4. Testing Results (`screenshots/testing_results.png`)
-Automated test suite execution passing all 15 test suites and 224 tests:
+Automated test suite execution passing all 15 test suites and 227 tests:
 ![Testing Results](screenshots/testing_results.png)
