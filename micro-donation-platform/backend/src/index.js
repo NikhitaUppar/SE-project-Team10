@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const cron = require('node-cron');
@@ -13,7 +13,16 @@ const { closePastDeadlineCampaigns } = require('./controllers/campaignController
 const app = express();
 
 // ── Middleware ───────────────────────────────────────────────────────────────
-app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',').map(o => o.trim());
+app.use(cors({
+  origin: (origin, cb) => {
+    // Allow requests with no origin (mobile apps, curl) or matching origin
+    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    cb(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

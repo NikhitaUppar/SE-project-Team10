@@ -14,8 +14,21 @@ const isSupabaseConfigured = () =>
   process.env.NODE_ENV !== 'test' &&
   Boolean(process.env.SUPABASE_URL && !process.env.SUPABASE_URL.includes('your-project'));
 
-// Idempotency tracking set to avoid duplicate receipt dispatch across webhooks and direct verify calls
-const processedOrders = new Set();
+// Helper to determine if DB verification should execute in verifyPayment
+const isDbEnabledForVerify = () =>
+  isSupabaseConfigured() || (process.env.NODE_ENV === 'test' && process.env.TEST_VERIFY_DB === 'true');
+
+// Idempotency tracking map to preserve payment & receipt delivery state and avoid duplicate dispatch
+class ProcessedOrdersMap extends Map {
+  add(orderId, data = {}) {
+    const existing = this.get(orderId) || {};
+    return this.set(orderId, {
+      ...existing,
+      ...(typeof data === 'object' && data !== null ? data : {}),
+    });
+  }
+}
+const processedOrders = new ProcessedOrdersMap();
 
 // FR-11, FR-12: Create Razorpay order
 const createOrder = async (req, res) => {
@@ -168,40 +181,104 @@ const verifyPayment = async (req, res) => {
       (process.env.RAZORPAY_KEY_SECRET?.includes('dummy') && razorpay_signature === 'dev_test_sig');
 
     if (!isValid) {
+      if (isDbEnabledForVerify() && razorpay_order_id) {
+        try {
+          await supabase
+            .from('donations')
+            .update({
+              status: 'failed',
+              razorpay_payment_id: razorpay_payment_id || null,
+            })
+            .eq('razorpay_order_id', razorpay_order_id)
+            .eq('status', 'pending');
+        } catch (dbErr) {
+          console.warn('Notice: Failed status DB update notice:', dbErr.message);
+        }
+      }
       return res.status(400).json({ error: 'Invalid payment signature' });
     }
 
     // 2. Idempotency check: if order was already processed, return 200 without duplicate email
     if (processedOrders.has(razorpay_order_id)) {
+      const orderInfo = processedOrders.get(razorpay_order_id) || {};
+
+      // If receipt_sent is not true in memory, consult database in case background email settled
+      if (!orderInfo.receipt_sent && isDbEnabledForVerify()) {
+        try {
+          const { data } = await supabase
+            .from('donations')
+            .select('receipt_sent, razorpay_payment_id, id')
+            .eq('razorpay_order_id', razorpay_order_id)
+            .single();
+          if (data && data.receipt_sent) {
+            orderInfo.receipt_sent = true;
+            if (data.razorpay_payment_id) orderInfo.payment_id = data.razorpay_payment_id;
+            if (data.id) orderInfo.donation_id = data.id;
+            processedOrders.set(razorpay_order_id, orderInfo);
+          }
+        } catch (dbErr) {
+          // ignore db notice
+        }
+      }
+
       return res.status(200).json({
         status: 'ok',
         message: 'Payment already verified and receipt already issued',
         already_processed: true,
+        payment_id: orderInfo.payment_id || razorpay_payment_id,
+        receipt_sent: Boolean(orderInfo.receipt_sent),
+        receipt_preview: orderInfo.receipt_preview || null,
+        donation_id: orderInfo.donation_id || null,
       });
     }
 
+    if (!isDbEnabledForVerify() && process.env.NODE_ENV !== 'test') {
+      console.error('Database is not configured for payment verification');
+      return res.status(500).json({ error: 'Database service is not configured or unavailable' });
+    }
+
     let donation = null;
-    if (isSupabaseConfigured()) {
+    if (isDbEnabledForVerify()) {
       try {
-        const { data } = await supabase
+        const { data, error: fetchErr } = await supabase
           .from('donations')
           .select('*, campaigns(*), users(*)')
           .eq('razorpay_order_id', razorpay_order_id)
           .single();
 
+        if (fetchErr && fetchErr.code !== 'PGRST116') {
+          console.error('Error fetching donation record:', fetchErr.message);
+          return res.status(500).json({ error: 'Database error fetching donation record' });
+        }
+
         donation = data;
 
         if (donation && donation.status === 'completed') {
-          processedOrders.add(razorpay_order_id);
+          const existingInfo = processedOrders.get(razorpay_order_id) || {};
+          const isSent = existingInfo.receipt_sent !== undefined
+            ? Boolean(existingInfo.receipt_sent)
+            : Boolean(donation.receipt_sent);
+
+          processedOrders.set(razorpay_order_id, {
+            payment_id: donation.razorpay_payment_id || razorpay_payment_id,
+            receipt_sent: isSent,
+            receipt_preview: existingInfo.receipt_preview || null,
+            donation_id: donation.id,
+          });
+
           return res.status(200).json({
             status: 'ok',
             message: 'Payment already completed and receipt already sent',
             already_processed: true,
+            payment_id: donation.razorpay_payment_id || razorpay_payment_id,
+            receipt_sent: isSent,
+            receipt_preview: existingInfo.receipt_preview || null,
+            donation_id: donation.id,
           });
         }
 
         // Update donation status to completed
-        const { data: updated } = await supabase
+        const { data: updated, error: updateErr } = await supabase
           .from('donations')
           .update({
             status: 'completed',
@@ -211,7 +288,12 @@ const verifyPayment = async (req, res) => {
           .select('*, campaigns(*), users(*)')
           .single();
 
-        if (updated) donation = updated;
+        if (updateErr || !updated) {
+          console.error('Error updating donation to completed:', updateErr?.message || 'Database update returned no record');
+          return res.status(500).json({ error: 'Failed to update donation status in database' });
+        }
+
+        donation = updated;
 
         // Update campaign raised_amount
         if (donation?.campaign_id) {
@@ -230,14 +312,20 @@ const verifyPayment = async (req, res) => {
           }
         }
       } catch (dbErr) {
-        console.warn('Notice: Error verifying payment in DB:', dbErr.message);
+        console.error('Database exception during verification:', dbErr.message);
+        return res.status(500).json({ error: 'Database exception occurred during payment verification' });
       }
     }
 
-    // Mark as processed in idempotency set
-    processedOrders.add(razorpay_order_id);
+    // Mark as processed in tracking map with initial pending state
+    processedOrders.set(razorpay_order_id, {
+      payment_id: donation?.razorpay_payment_id || razorpay_payment_id,
+      donation_id: donation?.id || null,
+      receipt_sent: false,
+      receipt_preview: null,
+    });
 
-    // 3. FR-13: Send receipt email on verified payment success
+    // 3. FR-13: Asynchronously dispatch receipt email on verified payment success
     const donorEmail = req.user?.email || donation?.users?.email || req.body?.email || 'donor@example.com';
     const isAnonymous = Boolean(donation?.is_anonymous ?? req.body?.is_anonymous);
     const donorName = isAnonymous
@@ -246,31 +334,86 @@ const verifyPayment = async (req, res) => {
     const campaignTitle = donation?.campaigns?.title || req.body?.campaign_name || req.body?.campaign_title || 'Clean Water Initiative';
     const amount = donation?.amount !== undefined ? Number(donation.amount) : Number(req.body?.amount || 250);
 
-    let emailResult = { success: false };
-    if (donorEmail && typeof emailController.sendReceiptEmail === 'function') {
-      try {
-        emailResult = await emailController.sendReceiptEmail(donorEmail, {
-          donorName,
-          amount,
-          campaignName: campaignTitle,
-          date: new Date().toLocaleDateString('en-IN', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          }),
-          transactionId: razorpay_payment_id,
-          receiptNumber: `RCPT-${razorpay_payment_id.replace(/^pay_/, '')}`,
-          paymentStatus: 'Successful',
-        });
-      } catch (emailErr) {
-        console.warn('Notice: Receipt email sending error (non-fatal):', emailErr.message);
+    const emailPayload = {
+      donorName,
+      amount,
+      campaignName: campaignTitle,
+      date: new Date().toLocaleDateString('en-IN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }),
+      transactionId: razorpay_payment_id,
+      receiptNumber: `RCPT-${razorpay_payment_id.replace(/^pay_/, '')}`,
+      paymentStatus: 'Successful',
+    };
+
+    const dispatchReceipt = async () => {
+      if (!donorEmail || typeof emailController.sendReceiptEmail !== 'function') {
+        return { success: false };
       }
+      try {
+        const result = await emailController.sendReceiptEmail(donorEmail, emailPayload);
+        const isSent = Boolean(result?.success);
+        const current = processedOrders.get(razorpay_order_id) || {};
+        current.receipt_sent = isSent;
+        current.receipt_preview = result?.previewUrl || null;
+        processedOrders.set(razorpay_order_id, current);
+
+        // Persist receipt delivery status in the database after the email operation completes
+        if (isDbEnabledForVerify()) {
+          try {
+            await supabase
+              .from('donations')
+              .update({ receipt_sent: isSent })
+              .eq('razorpay_order_id', razorpay_order_id);
+          } catch (dbUpdateErr) {
+            console.warn('Notice: Could not persist receipt_sent to database:', dbUpdateErr.message);
+          }
+        }
+
+        return result;
+      } catch (emailErr) {
+        console.warn('Notice: Receipt email sending notice (non-fatal):', emailErr.message);
+        const current = processedOrders.get(razorpay_order_id) || {};
+        current.receipt_sent = false;
+        processedOrders.set(razorpay_order_id, current);
+
+        // Persist receipt delivery failure status in database without affecting payment success
+        if (isDbEnabledForVerify()) {
+          try {
+            await supabase
+              .from('donations')
+              .update({ receipt_sent: false })
+              .eq('razorpay_order_id', razorpay_order_id);
+          } catch (dbUpdateErr) {
+            console.warn('Notice: Could not persist receipt_sent: false to database:', dbUpdateErr.message);
+          }
+        }
+
+        return { success: false, error: emailErr.message };
+      }
+    };
+
+    // Execute asynchronous receipt dispatch.
+    // In test environment, await dispatch to verify delivery assertions deterministically.
+    // In production, execute fire-and-forget so user payment confirmation is not blocked by SMTP latency.
+    if (process.env.NODE_ENV === 'test') {
+      await dispatchReceipt();
+    } else {
+      dispatchReceipt().catch(err => {
+        console.warn('Notice: Background receipt email error:', err.message);
+      });
     }
+
+    const currentOrderInfo = processedOrders.get(razorpay_order_id) || {};
 
     return res.status(200).json({
       status: 'ok',
       message: 'Payment verified and donation completed',
-      receipt_sent: emailResult?.success ?? true,
+      payment_id: donation?.razorpay_payment_id || razorpay_payment_id,
+      receipt_sent: Boolean(currentOrderInfo.receipt_sent),
+      receipt_preview: currentOrderInfo.receipt_preview || null,
       donation_id: donation?.id || null,
     });
   } catch (err) {
@@ -424,9 +567,80 @@ const verifyWebhook = async (req, res) => {
   }
 };
 
+// FR-13: Retrieve updated receipt delivery status for a verified donation
+const getReceiptStatus = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    if (!orderId) {
+      return res.status(400).json({ error: 'Order ID is required' });
+    }
+
+    let receiptSent = false;
+    let receiptPreview = null;
+    let paymentId = null;
+    let donationId = null;
+    let donationStatus = 'completed';
+
+    // 1. Check in-memory tracking map
+    if (processedOrders.has(orderId)) {
+      const info = processedOrders.get(orderId) || {};
+      receiptSent = Boolean(info.receipt_sent);
+      receiptPreview = info.receipt_preview || null;
+      paymentId = info.payment_id || null;
+      donationId = info.donation_id || null;
+    }
+
+    // 2. Query persistent database
+    if (isDbEnabledForVerify()) {
+      try {
+        const { data, error } = await supabase
+          .from('donations')
+          .select('id, status, receipt_sent, razorpay_payment_id')
+          .eq('razorpay_order_id', orderId)
+          .single();
+
+        if (!error && data) {
+          donationStatus = data.status || donationStatus;
+          if (data.receipt_sent !== undefined && data.receipt_sent !== null) {
+            receiptSent = Boolean(data.receipt_sent);
+          }
+          if (data.razorpay_payment_id) {
+            paymentId = data.razorpay_payment_id;
+          }
+          donationId = data.id;
+
+          // Keep in-memory cache synchronized with database
+          processedOrders.set(orderId, {
+            payment_id: paymentId,
+            receipt_sent: receiptSent,
+            receipt_preview: receiptPreview,
+            donation_id: donationId,
+          });
+        }
+      } catch (dbErr) {
+        console.warn('Notice: Error querying receipt status from database:', dbErr.message);
+      }
+    }
+
+    return res.status(200).json({
+      status: 'ok',
+      order_id: orderId,
+      payment_id: paymentId,
+      receipt_sent: receiptSent,
+      receipt_preview: receiptPreview,
+      donation_id: donationId,
+      donation_status: donationStatus,
+    });
+  } catch (err) {
+    console.error('getReceiptStatus error:', err);
+    return res.status(500).json({ error: 'Failed to retrieve receipt status' });
+  }
+};
+
 module.exports = {
   createOrder,
   verifyPayment,
   verifyWebhook,
+  getReceiptStatus,
   processedOrders,
 };

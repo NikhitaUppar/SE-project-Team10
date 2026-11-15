@@ -11,6 +11,9 @@ const crypto = require('crypto');
 
 const emailController = require('../src/controllers/emailController');
 
+let mockSupabaseUpdateError = null;
+let mockSupabaseUpdateData = undefined;
+
 // Mock Supabase
 jest.mock('../src/config/supabase', () => {
   const mockDonation = {
@@ -56,16 +59,26 @@ jest.mock('../src/config/supabase', () => {
               }),
             })),
           })),
-          update: jest.fn(() => ({
-            eq: jest.fn(() => ({
+          update: jest.fn(() => {
+            const builder = {
+              eq: jest.fn(() => builder),
               select: jest.fn(() => ({
-                single: jest.fn().mockResolvedValue({
-                  data: { ...mockDonation, status: 'completed' },
-                  error: null,
+                single: jest.fn().mockImplementation(async () => {
+                  if (mockSupabaseUpdateError) {
+                    return { data: null, error: mockSupabaseUpdateError };
+                  }
+                  if (mockSupabaseUpdateData !== undefined) {
+                    return { data: mockSupabaseUpdateData, error: null };
+                  }
+                  return {
+                    data: { ...mockDonation, status: 'completed' },
+                    error: null,
+                  };
                 }),
               })),
-            })),
-          })),
+            };
+            return builder;
+          }),
         };
       }
 
@@ -74,7 +87,7 @@ jest.mock('../src/config/supabase', () => {
           select: jest.fn(() => ({
             eq: jest.fn(() => ({
               single: jest.fn().mockResolvedValue({
-                data: { raised_amount: 1000 },
+                data: { id: '22222222-2222-2222-2222-222222222222', raised_amount: 1000, status: 'active' },
                 error: null,
               }),
             })),
@@ -101,6 +114,7 @@ describe('Issue #8 - Donation Receipt Email on Success (FR-13)', () => {
   const secret = process.env.RAZORPAY_KEY_SECRET;
 
   beforeAll(() => {
+    process.env.TEST_VERIFY_DB = 'true';
     authToken = jwt.sign(
       { id: testUserId, email: 'donor@example.com', role: 'donor' },
       process.env.JWT_SECRET,
@@ -108,8 +122,14 @@ describe('Issue #8 - Donation Receipt Email on Success (FR-13)', () => {
     );
   });
 
+  afterAll(() => {
+    delete process.env.TEST_VERIFY_DB;
+  });
+
   beforeEach(() => {
     processedOrders.clear();
+    mockSupabaseUpdateError = null;
+    mockSupabaseUpdateData = undefined;
   });
 
   describe('1. Direct Payment Verification: POST /api/donations/verify', () => {
@@ -254,6 +274,256 @@ describe('Issue #8 - Donation Receipt Email on Success (FR-13)', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('ok');
+      expect(res.body.receipt_sent).toBe(false);
+    });
+
+    it('should return receipt_sent: false when emailController returns { success: false }', async () => {
+      sendReceiptSpy.mockResolvedValueOnce({ success: false, reason: 'Invalid or missing email address' });
+
+      const orderId = 'order_test_email_unsuccessful_result';
+      const paymentId = 'pay_test_email_unsuccessful_result_789';
+      const validSignature = crypto
+        .createHmac('sha256', secret)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+
+      const res = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('ok');
+      expect(res.body.payment_id).toBe(paymentId);
+      expect(res.body.receipt_sent).toBe(false);
+    });
+
+    it('should return receipt_sent: true only when emailController returns { success: true }', async () => {
+      sendReceiptSpy.mockResolvedValueOnce({ success: true, messageId: 'msg-success-123' });
+
+      const orderId = 'order_test_email_successful_result';
+      const paymentId = 'pay_test_email_successful_result_101';
+      const validSignature = crypto
+        .createHmac('sha256', secret)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+
+      const res = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('ok');
+      expect(res.body.payment_id).toBe(paymentId);
+      expect(res.body.receipt_sent).toBe(true);
+    });
+
+    it('should reject verification and not mark donation successful when signature verification fails', async () => {
+      const orderId = 'order_test_failed_verification';
+      const paymentId = 'pay_test_failed_verification_404';
+
+      const res = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: 'invalid_forged_sig_value',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/invalid payment signature/i);
+      expect(res.body.status).toBeUndefined();
+      expect(sendReceiptSpy).not.toHaveBeenCalled();
+    });
+
+    it('should reject verification and not mark donation successful when payment ID is missing', async () => {
+      const orderId = 'order_test_missing_payment_id';
+
+      const res = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_signature: 'valid_looking_signature',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/missing payment verification parameters/i);
+      expect(res.body.status).toBeUndefined();
+      expect(sendReceiptSpy).not.toHaveBeenCalled();
+    });
+
+    it('should return 500 error and not report donation completion when Supabase database update fails with an error', async () => {
+      mockSupabaseUpdateError = { message: 'Database transaction aborted' };
+
+      const orderId = 'order_test_db_error_abort';
+      const paymentId = 'pay_test_db_error_abort_123';
+      const validSignature = crypto
+        .createHmac('sha256', secret)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+
+      const res = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      expect(res.status).toBe(500);
+      expect(res.body.error).toMatch(/database|failed/i);
+      expect(res.body.status).toBeUndefined();
+      expect(sendReceiptSpy).not.toHaveBeenCalled();
+      expect(processedOrders.has(orderId)).toBe(false);
+    });
+
+    it('should return 500 error and not report donation completion when Supabase database update returns no record', async () => {
+      mockSupabaseUpdateData = null;
+
+      const orderId = 'order_test_db_no_record';
+      const paymentId = 'pay_test_db_no_record_456';
+      const validSignature = crypto
+        .createHmac('sha256', secret)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+
+      const res = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      expect(res.status).toBe(500);
+      expect(res.body.error).toMatch(/database|failed/i);
+      expect(res.body.status).toBeUndefined();
+      expect(sendReceiptSpy).not.toHaveBeenCalled();
+      expect(processedOrders.has(orderId)).toBe(false);
+    });
+
+    it('should return receipt_sent: false on email failure and maintain receipt_sent: false on subsequent duplicate verification', async () => {
+      sendReceiptSpy.mockResolvedValueOnce({ success: false, reason: 'SMTP server unreachable' });
+
+      const orderId = 'order_test_email_fail_idempotent';
+      const paymentId = 'pay_test_email_fail_idempotent_1';
+      const validSignature = crypto
+        .createHmac('sha256', secret)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+
+      // First verification call: email fails
+      const res1 = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      expect(res1.status).toBe(200);
+      expect(res1.body.status).toBe('ok');
+      expect(res1.body.receipt_sent).toBe(false);
+      expect(sendReceiptSpy).toHaveBeenCalledTimes(1);
+
+      // Second verification call (duplicate): should preserve false, never falsely claim delivered
+      const res2 = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      expect(res2.status).toBe(200);
+      expect(res2.body.already_processed).toBe(true);
+      expect(res2.body.receipt_sent).toBe(false);
+      // Ensure no duplicate email dispatch
+      expect(sendReceiptSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return receipt_sent: true on email success and maintain receipt_sent: true on subsequent duplicate verification', async () => {
+      sendReceiptSpy.mockResolvedValueOnce({ success: true, messageId: 'msg-success-idempotent-999' });
+
+      const orderId = 'order_test_email_success_idempotent';
+      const paymentId = 'pay_test_email_success_idempotent_2';
+      const validSignature = crypto
+        .createHmac('sha256', secret)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+
+      // First verification call: email succeeds
+      const res1 = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      expect(res1.status).toBe(200);
+      expect(res1.body.status).toBe('ok');
+      expect(res1.body.receipt_sent).toBe(true);
+      expect(sendReceiptSpy).toHaveBeenCalledTimes(1);
+
+      // Second verification call (duplicate): should maintain true without duplicate dispatch
+      const res2 = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      expect(res2.status).toBe(200);
+      expect(res2.body.already_processed).toBe(true);
+      expect(res2.body.receipt_sent).toBe(true);
+      // Ensure no duplicate email dispatch
+      expect(sendReceiptSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should confirm payment remains completed and persisted when email delivery rejects with an exception', async () => {
+      sendReceiptSpy.mockRejectedValueOnce(new Error('Connection reset by peer during TLS handshake'));
+
+      const orderId = 'order_test_email_exception_completed';
+      const paymentId = 'pay_test_email_exception_completed_3';
+      const validSignature = crypto
+        .createHmac('sha256', secret)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+
+      const res = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      // Payment itself must succeed (HTTP 200 status 'ok')
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('ok');
+      expect(res.body.message).toMatch(/payment verified and donation completed/i);
+      // Email must be accurately reported as not delivered
+      expect(res.body.receipt_sent).toBe(false);
     });
   });
 
@@ -375,6 +645,153 @@ describe('Issue #8 - Donation Receipt Email on Success (FR-13)', () => {
       expect(mailOptions.html).toContain('Roopesh');
 
       sendMailSpy.mockRestore();
+    });
+  });
+
+  describe('4. Receipt Status Persistence & Retrieval Endpoint: GET /api/donations/receipt-status/:orderId', () => {
+    it('should reject unauthenticated request with 401', async () => {
+      const res = await request(app).get('/api/donations/receipt-status/order_test_any');
+      expect(res.status).toBe(401);
+    });
+
+    it('should retrieve receipt status for verified order from in-memory cache', async () => {
+      const orderId = 'order_status_test_mem_1';
+      processedOrders.set(orderId, {
+        payment_id: 'pay_mem_123',
+        receipt_sent: true,
+        receipt_preview: 'https://ethereal.email/preview/mem_123',
+        donation_id: 'donation_mem_123',
+      });
+
+      const res = await request(app)
+        .get(`/api/donations/receipt-status/${orderId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('ok');
+      expect(res.body.order_id).toBe(orderId);
+      expect(res.body.receipt_sent).toBe(true);
+      expect(res.body.receipt_preview).toBe('https://ethereal.email/preview/mem_123');
+    });
+
+    it('should query database for receipt status and synchronize memory map if map entry is missing', async () => {
+      const orderId = 'order_status_test_db_fallback';
+      processedOrders.delete(orderId);
+
+      const res = await request(app)
+        .get(`/api/donations/receipt-status/${orderId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('ok');
+      expect(res.body.order_id).toBe(orderId);
+      expect(processedOrders.has(orderId)).toBe(true);
+    });
+
+    it('should support alternative path format /api/donations/:orderId/receipt-status', async () => {
+      const orderId = 'order_status_alt_path';
+      processedOrders.set(orderId, {
+        payment_id: 'pay_alt_456',
+        receipt_sent: true,
+      });
+
+      const res = await request(app)
+        .get(`/api/donations/${orderId}/receipt-status`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('ok');
+      expect(res.body.receipt_sent).toBe(true);
+    });
+  });
+
+  describe('5. Backend Donation Amount Boundary Validation: POST /api/donations/create-order', () => {
+    const campaignId = '22222222-2222-2222-2222-222222222222';
+
+    it('should reject ₹0 with 400 and error message', async () => {
+      const res = await request(app)
+        .post('/api/donations/create-order')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ campaign_id: campaignId, amount: 0 });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/between ₹1 and ₹500/i);
+    });
+
+    it('should reject amount > ₹500 (e.g. ₹501) with 400', async () => {
+      const res = await request(app)
+        .post('/api/donations/create-order')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ campaign_id: campaignId, amount: 501 });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/between ₹1 and ₹500/i);
+    });
+
+    it('should reject negative amount with 400', async () => {
+      const res = await request(app)
+        .post('/api/donations/create-order')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ campaign_id: campaignId, amount: -10 });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/between ₹1 and ₹500/i);
+    });
+
+    it('should reject empty or missing amount with 400', async () => {
+      const res = await request(app)
+        .post('/api/donations/create-order')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ campaign_id: campaignId, amount: '' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/between ₹1 and ₹500/i);
+    });
+
+    it('should reject missing campaign_id with 400', async () => {
+      const res = await request(app)
+        .post('/api/donations/create-order')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ amount: 100 });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/campaign id is required/i);
+    });
+
+    it('should accept minimum boundary ₹1 with 200 and return created order', async () => {
+      const res = await request(app)
+        .post('/api/donations/create-order')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ campaign_id: campaignId, amount: 1 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.order_id).toBeDefined();
+      expect(res.body.amount).toBe(100);
+      expect(res.body.currency).toBe('INR');
+    });
+
+    it('should accept maximum boundary ₹500 with 200 and return created order', async () => {
+      const res = await request(app)
+        .post('/api/donations/create-order')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ campaign_id: campaignId, amount: 500 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.order_id).toBeDefined();
+      expect(res.body.amount).toBe(50000);
+      expect(res.body.currency).toBe('INR');
+    });
+
+    it('should accept standard valid amount ₹250 with 200 and return created order', async () => {
+      const res = await request(app)
+        .post('/api/donations/create-order')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ campaign_id: campaignId, amount: 250 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.order_id).toBeDefined();
+      expect(res.body.amount).toBe(25000);
+      expect(res.body.currency).toBe('INR');
     });
   });
 });

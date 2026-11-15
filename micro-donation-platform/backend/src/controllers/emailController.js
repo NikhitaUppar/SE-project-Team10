@@ -217,7 +217,10 @@ Thank you for your generous contribution.
       text: textContent,
       html: htmlContent,
     });
-    return { success: true, messageId: info?.messageId || 'sent' };
+    // Generate Ethereal preview URL if available (dev mode)
+    const previewUrl = nodemailer.getTestMessageUrl(info) || null;
+    if (previewUrl) console.log(`[EmailController] 📧 Receipt preview: ${previewUrl}`);
+    return { success: true, messageId: info?.messageId || 'sent', previewUrl };
   } catch (error) {
     console.warn('[EmailController] Notice: Email sending failure (non-fatal):', error.message);
     return { success: false, error: error.message };
