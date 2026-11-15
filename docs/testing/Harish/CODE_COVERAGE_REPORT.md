@@ -1,6 +1,6 @@
 # ✅ Code Coverage Report — Micro Donation Platform (Team 10)
 
-**Prepared by**: Haris (Code Coverage Testing)
+**Prepared by**: Harish (Code Coverage Testing)
 **Date**: 15 November 2026
 **Project**: SE Mini Project — Micro Donation Platform (Team 10)
 **Tool**: Jest `--coverage`
