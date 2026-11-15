@@ -14,6 +14,10 @@ const isSupabaseConfigured = () =>
   process.env.NODE_ENV !== 'test' &&
   Boolean(process.env.SUPABASE_URL && !process.env.SUPABASE_URL.includes('your-project'));
 
+// Helper to determine if DB verification should execute in verifyPayment
+const isDbEnabledForVerify = () =>
+  isSupabaseConfigured() || (process.env.NODE_ENV === 'test' && process.env.TEST_VERIFY_DB === 'true');
+
 // Idempotency tracking set to avoid duplicate receipt dispatch across webhooks and direct verify calls
 const processedOrders = new Set();
 
@@ -168,7 +172,7 @@ const verifyPayment = async (req, res) => {
       (process.env.RAZORPAY_KEY_SECRET?.includes('dummy') && razorpay_signature === 'dev_test_sig');
 
     if (!isValid) {
-      if (isSupabaseConfigured() && razorpay_order_id) {
+      if (isDbEnabledForVerify() && razorpay_order_id) {
         try {
           await supabase
             .from('donations')
@@ -196,8 +200,13 @@ const verifyPayment = async (req, res) => {
       });
     }
 
+    if (!isDbEnabledForVerify() && process.env.NODE_ENV !== 'test') {
+      console.error('Database is not configured for payment verification');
+      return res.status(500).json({ error: 'Database service is not configured or unavailable' });
+    }
+
     let donation = null;
-    if (isSupabaseConfigured()) {
+    if (isDbEnabledForVerify()) {
       try {
         const { data, error: fetchErr } = await supabase
           .from('donations')
@@ -234,12 +243,12 @@ const verifyPayment = async (req, res) => {
           .select('*, campaigns(*), users(*)')
           .single();
 
-        if (updateErr) {
-          console.error('Error updating donation to completed:', updateErr.message);
+        if (updateErr || !updated) {
+          console.error('Error updating donation to completed:', updateErr?.message || 'Database update returned no record');
           return res.status(500).json({ error: 'Failed to update donation status in database' });
         }
 
-        if (updated) donation = updated;
+        donation = updated;
 
         // Update campaign raised_amount
         if (donation?.campaign_id) {

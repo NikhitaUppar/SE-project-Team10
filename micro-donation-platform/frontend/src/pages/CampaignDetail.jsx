@@ -20,6 +20,7 @@ export default function CampaignDetail() {
   const [amount, setAmount]             = useState(100);
   const [isAnonymous, setIsAnonymous]   = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isVerifying, setIsVerifying]   = useState(false);
   const [error, setError]               = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(null);
   const [razorpayOptions, setRazorpayOptions] = useState(null); // controls mock modal
@@ -63,9 +64,13 @@ export default function CampaignDetail() {
         name: 'MicroDonate', description: `Donation to ${campaign?.title || 'Cause'}`,
         order_id,
         handler: async (response) => {
+          setIsSubmitting(true);
+          setIsVerifying(true);
+
           // Validate that payment ID is returned by payment gateway
           if (!response || !response.razorpay_payment_id) {
             setError('Payment verification failed: No payment ID received from payment provider.');
+            setIsVerifying(false);
             setIsSubmitting(false);
             return;
           }
@@ -76,6 +81,7 @@ export default function CampaignDetail() {
 
           if (!signature) {
             setError('Payment verification failed: Missing payment verification signature.');
+            setIsVerifying(false);
             setIsSubmitting(false);
             return;
           }
@@ -117,7 +123,6 @@ export default function CampaignDetail() {
               created_at: new Date().toISOString(),
               donor_name: isAnonymous ? 'Anonymous' : (user?.display_name || 'Donor'),
             }, ...prev]);
-            setIsSubmitting(false);
           } catch (verifyErr) {
             console.error('Payment verification error:', verifyErr);
             const failureMsg =
@@ -125,6 +130,8 @@ export default function CampaignDetail() {
               verifyErr.message ||
               'Payment verification failed. If your account was debited, verification is pending and your donation will be credited shortly.';
             setError(`Payment verification failed: ${failureMsg}`);
+          } finally {
+            setIsVerifying(false);
             setIsSubmitting(false);
           }
         },
@@ -341,8 +348,8 @@ export default function CampaignDetail() {
                   </div>
                   <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
                     <span style={{ color:'#A16207' }}>Receipt:</span>
-                    <span style={{ color: paymentSuccess.receiptSent ? '#14532D' : '#B45309', fontWeight:700 }}>
-                      {paymentSuccess.receiptSent ? '✅ Emailed' : '⏳ Delivery pending'}
+                    <span style={{ color: Boolean(paymentSuccess?.receiptSent) ? '#14532D' : '#B45309', fontWeight:700 }}>
+                      {Boolean(paymentSuccess?.receiptSent) ? 'Emailed' : 'Pending'}
                     </span>
                   </div>
                 </div>
@@ -407,15 +414,17 @@ export default function CampaignDetail() {
                     <span style={{ fontSize:'0.82rem', color:'#78350F', fontWeight:500 }}>Donate anonymously</span>
                   </label>
 
-                  <button type="submit" disabled={isSubmitting} style={{
-                    width:'100%', background: isSubmitting ? '#FCA5A5' : 'linear-gradient(135deg,#C2410C,#EA580C)',
+                  <button type="submit" disabled={isSubmitting || isVerifying} style={{
+                    width:'100%', background: (isSubmitting || isVerifying) ? '#FCA5A5' : 'linear-gradient(135deg,#C2410C,#EA580C)',
                     color:'#fff', border:'none', borderRadius:10,
                     padding:'13px', fontWeight:800, fontSize:'0.95rem',
-                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    cursor: (isSubmitting || isVerifying) ? 'not-allowed' : 'pointer',
                     boxShadow:'0 4px 16px rgba(194,65,12,0.3)',
                     display:'flex', justifyContent:'center', alignItems:'center', gap:8, fontFamily:'inherit',
                   }}>
-                    {isSubmitting ? (
+                    {isVerifying ? (
+                      <><div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,0.4)', borderTop:'2px solid #fff', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} /><span>Verifying payment…</span></>
+                    ) : isSubmitting ? (
                       <><div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,0.4)', borderTop:'2px solid #fff', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} /><span>Opening payment…</span></>
                     ) : (
                       <span>Donate ₹{amount || 0} →</span>

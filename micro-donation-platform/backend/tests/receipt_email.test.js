@@ -11,6 +11,9 @@ const crypto = require('crypto');
 
 const emailController = require('../src/controllers/emailController');
 
+let mockSupabaseUpdateError = null;
+let mockSupabaseUpdateData = undefined;
+
 // Mock Supabase
 jest.mock('../src/config/supabase', () => {
   const mockDonation = {
@@ -56,16 +59,26 @@ jest.mock('../src/config/supabase', () => {
               }),
             })),
           })),
-          update: jest.fn(() => ({
-            eq: jest.fn(() => ({
+          update: jest.fn(() => {
+            const builder = {
+              eq: jest.fn(() => builder),
               select: jest.fn(() => ({
-                single: jest.fn().mockResolvedValue({
-                  data: { ...mockDonation, status: 'completed' },
-                  error: null,
+                single: jest.fn().mockImplementation(async () => {
+                  if (mockSupabaseUpdateError) {
+                    return { data: null, error: mockSupabaseUpdateError };
+                  }
+                  if (mockSupabaseUpdateData !== undefined) {
+                    return { data: mockSupabaseUpdateData, error: null };
+                  }
+                  return {
+                    data: { ...mockDonation, status: 'completed' },
+                    error: null,
+                  };
                 }),
               })),
-            })),
-          })),
+            };
+            return builder;
+          }),
         };
       }
 
@@ -101,6 +114,7 @@ describe('Issue #8 - Donation Receipt Email on Success (FR-13)', () => {
   const secret = process.env.RAZORPAY_KEY_SECRET;
 
   beforeAll(() => {
+    process.env.TEST_VERIFY_DB = 'true';
     authToken = jwt.sign(
       { id: testUserId, email: 'donor@example.com', role: 'donor' },
       process.env.JWT_SECRET,
@@ -108,8 +122,14 @@ describe('Issue #8 - Donation Receipt Email on Success (FR-13)', () => {
     );
   });
 
+  afterAll(() => {
+    delete process.env.TEST_VERIFY_DB;
+  });
+
   beforeEach(() => {
     processedOrders.clear();
+    mockSupabaseUpdateError = null;
+    mockSupabaseUpdateData = undefined;
   });
 
   describe('1. Direct Payment Verification: POST /api/donations/verify', () => {
@@ -341,6 +361,58 @@ describe('Issue #8 - Donation Receipt Email on Success (FR-13)', () => {
       expect(res.body.error).toMatch(/missing payment verification parameters/i);
       expect(res.body.status).toBeUndefined();
       expect(sendReceiptSpy).not.toHaveBeenCalled();
+    });
+
+    it('should return 500 error and not report donation completion when Supabase database update fails with an error', async () => {
+      mockSupabaseUpdateError = { message: 'Database transaction aborted' };
+
+      const orderId = 'order_test_db_error_abort';
+      const paymentId = 'pay_test_db_error_abort_123';
+      const validSignature = crypto
+        .createHmac('sha256', secret)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+
+      const res = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      expect(res.status).toBe(500);
+      expect(res.body.error).toMatch(/database|failed/i);
+      expect(res.body.status).toBeUndefined();
+      expect(sendReceiptSpy).not.toHaveBeenCalled();
+      expect(processedOrders.has(orderId)).toBe(false);
+    });
+
+    it('should return 500 error and not report donation completion when Supabase database update returns no record', async () => {
+      mockSupabaseUpdateData = null;
+
+      const orderId = 'order_test_db_no_record';
+      const paymentId = 'pay_test_db_no_record_456';
+      const validSignature = crypto
+        .createHmac('sha256', secret)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+
+      const res = await request(app)
+        .post('/api/donations/verify')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: validSignature,
+        });
+
+      expect(res.status).toBe(500);
+      expect(res.body.error).toMatch(/database|failed/i);
+      expect(res.body.status).toBeUndefined();
+      expect(sendReceiptSpy).not.toHaveBeenCalled();
+      expect(processedOrders.has(orderId)).toBe(false);
     });
   });
 
