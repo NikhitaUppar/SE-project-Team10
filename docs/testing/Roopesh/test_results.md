@@ -38,14 +38,14 @@ npm test -- tests/razorpay.test.js
 
 ---
 
-### Suite B: `receipt_email.test.js` — Donation Receipt Email & Verification Persistence (FR-13)
+### Suite B: `receipt_email.test.js` — Donation Receipt Email, Database Persistence & Amount Validation (FR-13)
 
 **Command run:**
 ```bash
 npm test -- tests/receipt_email.test.js
 ```
 
-**Result:** ✅ PASS — All 16 tests passed
+**Result:** ✅ PASS — All 31 tests passed
 
 | # | Test Description | Status |
 |---|---|---|
@@ -68,8 +68,20 @@ npm test -- tests/receipt_email.test.js
 | 17 | Should return receipt_sent: false on email failure and maintain receipt_sent: false on subsequent duplicate verification | ✅ PASS |
 | 18 | Should return receipt_sent: true on email success and maintain receipt_sent: true on subsequent duplicate verification | ✅ PASS |
 | 19 | Should confirm payment remains completed and persisted when email delivery rejects with an exception | ✅ PASS |
+| 20 | Receipt Status API: Should reject unauthenticated request with 401 | ✅ PASS |
+| 21 | Receipt Status API: Should retrieve receipt status for verified order from in-memory cache | ✅ PASS |
+| 22 | Receipt Status API: Should query database for receipt status and synchronize memory map if map entry is missing | ✅ PASS |
+| 23 | Receipt Status API: Should support alternative path format /api/donations/:orderId/receipt-status | ✅ PASS |
+| 24 | Amount Validation: Should reject ₹0 with 400 and error message | ✅ PASS |
+| 25 | Amount Validation: Should reject amount > ₹500 (e.g. ₹501) with 400 | ✅ PASS |
+| 26 | Amount Validation: Should reject negative amount with 400 | ✅ PASS |
+| 27 | Amount Validation: Should reject empty or missing amount with 400 | ✅ PASS |
+| 28 | Amount Validation: Should reject missing campaign_id with 400 | ✅ PASS |
+| 29 | Amount Validation: Should accept minimum boundary ₹1 with 200 and return created order | ✅ PASS |
+| 30 | Amount Validation: Should accept maximum boundary ₹500 with 200 and return created order | ✅ PASS |
+| 31 | Amount Validation: Should accept standard valid amount ₹250 with 200 and return created order | ✅ PASS |
 
-**Tests: 19 passed, 19 total**
+**Tests: 31 passed, 31 total**
 
 ---
 
@@ -92,9 +104,44 @@ npm test -- tests/authDonation.integration.test.js
 
 ---
 
+### Suite D: `frontend/tests/amount_validation.test.mjs` — Frontend Immediate Donation Amount Validation
+
+**Command run:**
+```bash
+cd micro-donation-platform/frontend && npm test
+```
+
+**Result:** ✅ PASS — All 14 tests passed
+
+| # | Test Description | Status |
+|---|---|---|
+| 1 | Case 1: ₹0 entered immediately returns below-minimum error and disables submission | ✅ PASS |
+| 2 | Case 2: "0" string entered immediately returns below-minimum error and disables submission | ✅ PASS |
+| 3 | Case 3: Negative amount entered immediately returns below-minimum error | ✅ PASS |
+| 4 | Case 4: ₹1 minimum valid boundary amount is accepted and submittable | ✅ PASS |
+| 5 | Case 5: "1" string boundary amount is accepted and submittable | ✅ PASS |
+| 6 | Case 6: ₹500 maximum valid boundary amount is accepted and submittable | ✅ PASS |
+| 7 | Case 7: "500" string boundary amount is accepted and submittable | ✅ PASS |
+| 8 | Case 8: ₹501 above-maximum amount immediately returns above-maximum error | ✅ PASS |
+| 9 | Case 9: "501" string above-maximum amount immediately returns above-maximum error | ✅ PASS |
+| 10 | Case 10: Empty string input is not submittable but shows no misleading error while typing | ✅ PASS |
+| 11 | Case 11: Whitespace-only input shows no misleading error while typing | ✅ PASS |
+| 12 | Case 12: null and undefined inputs are handled gracefully without error message | ✅ PASS |
+| 13 | Case 13: Standard valid amounts (₹50, ₹100, ₹250) are valid and submittable | ✅ PASS |
+| 14 | Case 14: Non-numeric strings return a clear invalid amount message | ✅ PASS |
+
+**Tests: 14 passed, 14 total**
+
+---
+
 ## 2. Manual Testing Results
 
 ### Application URL: http://localhost:5173
+
+> [!NOTE]
+> **Environment Distinction:**
+> - **Development / Testing Mode:** `MockRazorpay` modal simulates Razorpay checkout client-side when dummy keys (`rzp_test_placeholder` / `xxxx`) are configured.
+> - **Production Mode:** Real `window.Razorpay` checkout modal opens; backend strictly enforces HMAC-SHA256 signature verification via secret key before any donation is marked completed.
 
 | TC ID | Scenario | Method | Status |
 |---|---|---|---|
@@ -127,6 +174,12 @@ npm test -- tests/authDonation.integration.test.js
 | TC-RCP-04 | HTML format valid | Manual | ✅ PASS |
 | TC-RCP-05 | Receipt non-blocking | Manual | ✅ PASS |
 | TC-RCP-06 | Anonymous receipt name | Manual | ✅ PASS |
+| TC-VAL-01 | Immediate error on ₹0: "Minimum donation amount is ₹1." + Donate disabled | Manual + Automated | ✅ PASS |
+| TC-VAL-02 | Immediate error on ₹501: "Maximum donation amount is ₹500." + Donate disabled | Manual + Automated | ✅ PASS |
+| TC-VAL-03 | Immediate valid on ₹1: error cleared + Donate enabled | Manual + Automated | ✅ PASS |
+| TC-VAL-04 | Immediate valid on ₹500: error cleared + Donate enabled | Manual + Automated | ✅ PASS |
+| TC-VAL-05 | Empty input while typing: no misleading error shown + Donate disabled | Manual + Automated | ✅ PASS |
+| TC-VAL-06 | Asynchronous receipt status retrieval via `/api/donations/receipt-status/:orderId` | Manual + Automated | ✅ PASS |
 
 ---
 
@@ -134,13 +187,14 @@ npm test -- tests/authDonation.integration.test.js
 
 | Metric | Value |
 |---|---|
-| **Total Manual Test Cases** | 29 |
-| **Passed** | 29 |
+| **Total Manual Test Cases** | 35 |
+| **Passed** | 35 |
 | **Failed** | 0 |
 | **Not Tested** | 0 |
-| **Automated Tests (Payment suites)** | 59 |
-| **Automated Tests Passed** | 59 (13 razorpay + 19 receipt_email + 27 authDonation) |
-| **Total Backend Test Suites Passed** | 15 / 15 (227 / 227 tests passing) |
+| **Payment-Related Automated Tests** | 85 (13 razorpay + 31 receipt_email + 27 authDonation + 14 frontend validation) |
+| **Payment-Related Automated Tests Passed** | 85 / 85 (100%) |
+| **Total Backend Test Suites Passed** | 15 / 15 (239 / 239 tests passing) |
+| **Total Frontend Unit Tests Passed** | 1 / 1 suite (14 / 14 tests passing) |
 | **Real Email Receipt Verified** | ✅ Yes — roopeshpoojary1926@gmail.com |
 | **Screenshots Directory** | `docs/testing/Roopesh/screenshots/` (4 genuine test captures) |
 
@@ -152,7 +206,7 @@ From `npm test -- tests/razorpay.test.js tests/receipt_email.test.js`:
 
 | File | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|
-| `donationController.js` | 66.66% | 60.10% | 100% | 66.66% |
+| `donationController.js` | 68.53% | 60.21% | 88.88% | 69.13% |
 | `emailController.js` | 51.06% | 52.38% | 25% | 58.53% |
 | `donations.js` (routes) | 100% | 100% | 100% | 100% |
 
@@ -163,7 +217,7 @@ From `npm test -- tests/razorpay.test.js tests/receipt_email.test.js`:
 Four genuine screenshots capturing actual system validation in local environment:
 
 ### 1. Payment Modal (`screenshots/payment_modal.png`)
-Realistic checkout modal with UPI, Card, Net Banking, and Wallet payment methods:
+Realistic checkout modal with UPI, Card, Net Banking, and Wallet payment methods in development test mode:
 ![Payment Modal](screenshots/payment_modal.png)
 
 ### 2. Successful Payment (`screenshots/successful_payment.png`)
@@ -175,5 +229,5 @@ Official responsive HTML donation receipt dispatched to donor with transaction r
 ![Receipt Email](screenshots/receipt_email.png)
 
 ### 4. Testing Results (`screenshots/testing_results.png`)
-Automated test suite execution passing all 15 test suites and 227 tests:
+Automated test suite execution passing all 15 test suites and 239 tests:
 ![Testing Results](screenshots/testing_results.png)

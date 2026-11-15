@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import ShareButton from '../components/campaign/ShareButton';
 import { getRemainingDaysText } from '../utils/dateUtils';
 import MockRazorpay from '../components/common/MockRazorpay';
+import { validateDonationAmount } from '../utils/donationValidation';
 
 const PRESET_AMOUNTS = [50, 100, 250, 500];
 
@@ -18,6 +19,7 @@ export default function CampaignDetail() {
   const [donationsLoading, setDonationsLoading] = useState(true);
   const [donationsError, setDonationsError]     = useState('');
   const [amount, setAmount]             = useState(100);
+  const [amountError, setAmountError]   = useState('');
   const [isAnonymous, setIsAnonymous]   = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVerifying, setIsVerifying]   = useState(false);
@@ -49,10 +51,60 @@ export default function CampaignDetail() {
     return () => { active = false; };
   }, [id]);
 
+  // Retrieve updated receipt status asynchronously if initially pending
+  useEffect(() => {
+    if (!paymentSuccess || paymentSuccess.receiptSent || !paymentSuccess.orderId) return;
+
+    let attempts = 0;
+    const maxAttempts = 6;
+    const interval = setInterval(async () => {
+      attempts += 1;
+      try {
+        const res = await api.get(`/donations/receipt-status/${paymentSuccess.orderId}`);
+        if (res.data?.receipt_sent) {
+          setPaymentSuccess(prev => (prev ? {
+            ...prev,
+            receiptSent: true,
+            receiptPreview: res.data.receipt_preview || prev.receiptPreview,
+          } : null));
+          clearInterval(interval);
+        }
+      } catch {
+        // Silently retry up to maxAttempts
+      }
+      if (attempts >= maxAttempts) {
+        clearInterval(interval);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [paymentSuccess]);
+
+  const handleAmountChange = (val) => {
+    setAmount(val);
+    const validation = validateDonationAmount(val);
+    setAmountError(validation.error);
+    if (validation.isValid) {
+      setError('');
+    }
+  };
+
+  const handlePresetSelect = (presetVal) => {
+    setAmount(presetVal);
+    setAmountError('');
+    setError('');
+  };
+
   const handleDonate = async (e) => {
     e.preventDefault(); setError('');
-    const num = Number(amount);
-    if (!num || num < 1 || num > 500) { setError('Donation amount must be between ₹1 and ₹500.'); return; }
+    const validation = validateDonationAmount(amount);
+    if (!validation.isSubmittable) {
+      const errText = validation.error || 'Donation amount must be between ₹1 and ₹500.';
+      setAmountError(errText);
+      setError(errText);
+      return;
+    }
+    const num = validation.numericAmount;
     setIsSubmitting(true);
     try {
       const res = await api.post('/donations/create-order', { campaign_id: campaign?.id || id, amount: num, is_anonymous: isAnonymous });
@@ -387,26 +439,49 @@ export default function CampaignDetail() {
                   </label>
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginBottom:12 }}>
                     {PRESET_AMOUNTS.map(p => (
-                      <button key={p} type="button" onClick={() => setAmount(p)}
+                      <button key={p} type="button" onClick={() => handlePresetSelect(p)}
                         style={{ padding:'9px 4px', borderRadius:8, border:'none', cursor:'pointer', fontSize:'0.82rem', fontWeight:800,
-                          background: amount===p ? 'linear-gradient(135deg,#C2410C,#EA580C)' : '#FFF7ED',
-                          color: amount===p ? '#fff' : '#92400E',
-                          boxShadow: amount===p ? '0 2px 8px rgba(194,65,12,0.25)' : 'none',
+                          background: Number(amount)===p ? 'linear-gradient(135deg,#C2410C,#EA580C)' : '#FFF7ED',
+                          color: Number(amount)===p ? '#fff' : '#92400E',
+                          boxShadow: Number(amount)===p ? '0 2px 8px rgba(194,65,12,0.25)' : 'none',
                           fontFamily:'inherit',
                         }}>₹{p}</button>
                     ))}
                   </div>
 
-                  <div style={{ position:'relative', marginBottom:16 }}>
-                    <span style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', color:'#A16207', fontWeight:700, fontSize:'0.9rem', pointerEvents:'none' }}>₹</span>
+                  <div style={{ position:'relative', marginBottom: amountError ? 6 : 16 }}>
+                    <span style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', color: amountError ? '#DC2626' : '#A16207', fontWeight:700, fontSize:'0.9rem', pointerEvents:'none' }}>₹</span>
                     <input type="number" min="1" max="500" value={amount}
-                      onChange={e => setAmount(Number(e.target.value))} required
-                      placeholder="Custom amount"
-                      style={{ width:'100%', paddingLeft:28, paddingRight:12, paddingTop:10, paddingBottom:10, border:'1.5px solid #FED7AA', borderRadius:10, fontSize:'0.9rem', background:'#FFF7ED', color:'#1C0A00', outline:'none', boxSizing:'border-box', fontFamily:'inherit' }}
-                      onFocus={e => e.target.style.borderColor = '#EA580C'}
-                      onBlur={e => e.target.style.borderColor = '#FED7AA'}
+                      onChange={e => handleAmountChange(e.target.value)} required
+                      placeholder="Custom amount (₹1 – ₹500)"
+                      aria-invalid={Boolean(amountError)}
+                      aria-describedby={amountError ? "amount-error-msg" : undefined}
+                      style={{
+                        width:'100%', paddingLeft:28, paddingRight:12, paddingTop:10, paddingBottom:10,
+                        border: amountError ? '1.5px solid #EF4444' : '1.5px solid #FED7AA',
+                        borderRadius:10, fontSize:'0.9rem',
+                        background: amountError ? '#FEF2F2' : '#FFF7ED',
+                        color:'#1C0A00', outline:'none', boxSizing:'border-box', fontFamily:'inherit'
+                      }}
+                      onFocus={e => e.target.style.borderColor = amountError ? '#EF4444' : '#EA580C'}
+                      onBlur={e => e.target.style.borderColor = amountError ? '#EF4444' : '#FED7AA'}
                     />
                   </div>
+
+                  {amountError && (
+                    <div id="amount-error-msg" role="alert" style={{
+                      color: '#DC2626',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      marginBottom: 14,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6
+                    }}>
+                      <span>⚠️</span>
+                      <span>{amountError}</span>
+                    </div>
+                  )}
 
                   <label style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer', marginBottom:20 }}>
                     <input type="checkbox" id="isAnonymous" checked={isAnonymous} onChange={e => setIsAnonymous(e.target.checked)}
@@ -414,22 +489,30 @@ export default function CampaignDetail() {
                     <span style={{ fontSize:'0.82rem', color:'#78350F', fontWeight:500 }}>Donate anonymously</span>
                   </label>
 
-                  <button type="submit" disabled={isSubmitting || isVerifying} style={{
-                    width:'100%', background: (isSubmitting || isVerifying) ? '#FCA5A5' : 'linear-gradient(135deg,#C2410C,#EA580C)',
-                    color:'#fff', border:'none', borderRadius:10,
-                    padding:'13px', fontWeight:800, fontSize:'0.95rem',
-                    cursor: (isSubmitting || isVerifying) ? 'not-allowed' : 'pointer',
-                    boxShadow:'0 4px 16px rgba(194,65,12,0.3)',
-                    display:'flex', justifyContent:'center', alignItems:'center', gap:8, fontFamily:'inherit',
-                  }}>
-                    {isVerifying ? (
-                      <><div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,0.4)', borderTop:'2px solid #fff', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} /><span>Verifying payment…</span></>
-                    ) : isSubmitting ? (
-                      <><div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,0.4)', borderTop:'2px solid #fff', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} /><span>Opening payment…</span></>
-                    ) : (
-                      <span>Donate ₹{amount || 0} →</span>
-                    )}
-                  </button>
+                  {(() => {
+                    const currentValidation = validateDonationAmount(amount);
+                    const isDonateDisabled = isSubmitting || isVerifying || !currentValidation.isSubmittable;
+
+                    return (
+                      <button type="submit" disabled={isDonateDisabled} style={{
+                        width:'100%',
+                        background: isDonateDisabled ? '#FCA5A5' : 'linear-gradient(135deg,#C2410C,#EA580C)',
+                        color:'#fff', border:'none', borderRadius:10,
+                        padding:'13px', fontWeight:800, fontSize:'0.95rem',
+                        cursor: isDonateDisabled ? 'not-allowed' : 'pointer',
+                        boxShadow: isDonateDisabled ? 'none' : '0 4px 16px rgba(194,65,12,0.3)',
+                        display:'flex', justifyContent:'center', alignItems:'center', gap:8, fontFamily:'inherit',
+                      }}>
+                        {isVerifying ? (
+                          <><div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,0.4)', borderTop:'2px solid #fff', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} /><span>Verifying payment…</span></>
+                        ) : isSubmitting ? (
+                          <><div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,0.4)', borderTop:'2px solid #fff', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} /><span>Opening payment…</span></>
+                        ) : (
+                          <span>Donate ₹{currentValidation.numericAmount || 0} →</span>
+                        )}
+                      </button>
+                    );
+                  })()}
                 </form>
                 <p style={{ textAlign:'center', fontSize:'0.7rem', color:'#A16207', marginTop:10 }}>
                   Secure payment via Razorpay

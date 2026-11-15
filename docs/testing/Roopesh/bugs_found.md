@@ -115,8 +115,25 @@
 
 ---
 
+## BUG-07 — Lack of Immediate Donation Amount Validation & Async Receipt Status Polling
+
+| Field | Detail |
+|---|---|
+| **Bug ID** | BUG-07 |
+| **Severity** | High |
+| **Feature** | Donation Input Validation & Receipt Status Lifecycle |
+| **Description** | 1. Invalid donation amounts (e.g. ₹0, ₹501, negative numbers) were only validated upon clicking the "Donate" button; no immediate feedback was provided while the user was typing.<br>2. When receipt email delivery completed asynchronously in the background, the frontend remained on "Pending" because it had no mechanism to poll or retrieve the updated persistent receipt status from the backend database. |
+| **Steps to Reproduce** | 1. Enter `0` or `501` in the custom amount input. Notice no immediate error until submitting.<br>2. Complete a donation where receipt dispatch is asynchronous. Notice frontend card remains permanently on "Pending". |
+| **Expected** | 1. Immediate error feedback while typing ("Minimum donation amount is ₹1." or "Maximum donation amount is ₹500.") and disabled Donate button.<br>2. Background receipt email delivery persists `receipt_sent` to the database, and the frontend automatically polls `/api/donations/receipt-status/:orderId` to update status to "Emailed". |
+| **Actual** | Validation was deferred to form submit; frontend status permanently showed "Pending" after asynchronous email dispatch. |
+| **Fix Applied** | ✅ Added `validateDonationAmount` utility with unit tests; hooked immediate feedback into `CampaignDetail.jsx` with input highlighting and disabled submit button; added `GET /api/donations/receipt-status/:orderId` endpoint with database persistence and automatic frontend polling. |
+| **Fixed By** | Roopesh |
+
+---
+
 ## Notes
 
-- All 6 identified issues (including review items from PR #58) have been resolved and verified with automated test suites.
-- All 15 backend test suites pass cleanly (224/224 tests passing).
+- All 7 identified issues (including review items from PR #58) have been resolved and verified with automated test suites.
+- All 15 backend test suites pass cleanly (239/239 tests passing).
+- All frontend validation tests pass cleanly (14/14 tests passing).
 - Zero merge conflicts between working branch `test/manual-testing-roopesh` and target branch `feature/15-final-documentation`.

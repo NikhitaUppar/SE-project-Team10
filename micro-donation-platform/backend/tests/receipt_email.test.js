@@ -87,7 +87,7 @@ jest.mock('../src/config/supabase', () => {
           select: jest.fn(() => ({
             eq: jest.fn(() => ({
               single: jest.fn().mockResolvedValue({
-                data: { raised_amount: 1000 },
+                data: { id: '22222222-2222-2222-2222-222222222222', raised_amount: 1000, status: 'active' },
                 error: null,
               }),
             })),
@@ -645,6 +645,153 @@ describe('Issue #8 - Donation Receipt Email on Success (FR-13)', () => {
       expect(mailOptions.html).toContain('Roopesh');
 
       sendMailSpy.mockRestore();
+    });
+  });
+
+  describe('4. Receipt Status Persistence & Retrieval Endpoint: GET /api/donations/receipt-status/:orderId', () => {
+    it('should reject unauthenticated request with 401', async () => {
+      const res = await request(app).get('/api/donations/receipt-status/order_test_any');
+      expect(res.status).toBe(401);
+    });
+
+    it('should retrieve receipt status for verified order from in-memory cache', async () => {
+      const orderId = 'order_status_test_mem_1';
+      processedOrders.set(orderId, {
+        payment_id: 'pay_mem_123',
+        receipt_sent: true,
+        receipt_preview: 'https://ethereal.email/preview/mem_123',
+        donation_id: 'donation_mem_123',
+      });
+
+      const res = await request(app)
+        .get(`/api/donations/receipt-status/${orderId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('ok');
+      expect(res.body.order_id).toBe(orderId);
+      expect(res.body.receipt_sent).toBe(true);
+      expect(res.body.receipt_preview).toBe('https://ethereal.email/preview/mem_123');
+    });
+
+    it('should query database for receipt status and synchronize memory map if map entry is missing', async () => {
+      const orderId = 'order_status_test_db_fallback';
+      processedOrders.delete(orderId);
+
+      const res = await request(app)
+        .get(`/api/donations/receipt-status/${orderId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('ok');
+      expect(res.body.order_id).toBe(orderId);
+      expect(processedOrders.has(orderId)).toBe(true);
+    });
+
+    it('should support alternative path format /api/donations/:orderId/receipt-status', async () => {
+      const orderId = 'order_status_alt_path';
+      processedOrders.set(orderId, {
+        payment_id: 'pay_alt_456',
+        receipt_sent: true,
+      });
+
+      const res = await request(app)
+        .get(`/api/donations/${orderId}/receipt-status`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('ok');
+      expect(res.body.receipt_sent).toBe(true);
+    });
+  });
+
+  describe('5. Backend Donation Amount Boundary Validation: POST /api/donations/create-order', () => {
+    const campaignId = '22222222-2222-2222-2222-222222222222';
+
+    it('should reject ₹0 with 400 and error message', async () => {
+      const res = await request(app)
+        .post('/api/donations/create-order')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ campaign_id: campaignId, amount: 0 });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/between ₹1 and ₹500/i);
+    });
+
+    it('should reject amount > ₹500 (e.g. ₹501) with 400', async () => {
+      const res = await request(app)
+        .post('/api/donations/create-order')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ campaign_id: campaignId, amount: 501 });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/between ₹1 and ₹500/i);
+    });
+
+    it('should reject negative amount with 400', async () => {
+      const res = await request(app)
+        .post('/api/donations/create-order')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ campaign_id: campaignId, amount: -10 });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/between ₹1 and ₹500/i);
+    });
+
+    it('should reject empty or missing amount with 400', async () => {
+      const res = await request(app)
+        .post('/api/donations/create-order')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ campaign_id: campaignId, amount: '' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/between ₹1 and ₹500/i);
+    });
+
+    it('should reject missing campaign_id with 400', async () => {
+      const res = await request(app)
+        .post('/api/donations/create-order')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ amount: 100 });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/campaign id is required/i);
+    });
+
+    it('should accept minimum boundary ₹1 with 200 and return created order', async () => {
+      const res = await request(app)
+        .post('/api/donations/create-order')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ campaign_id: campaignId, amount: 1 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.order_id).toBeDefined();
+      expect(res.body.amount).toBe(100);
+      expect(res.body.currency).toBe('INR');
+    });
+
+    it('should accept maximum boundary ₹500 with 200 and return created order', async () => {
+      const res = await request(app)
+        .post('/api/donations/create-order')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ campaign_id: campaignId, amount: 500 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.order_id).toBeDefined();
+      expect(res.body.amount).toBe(50000);
+      expect(res.body.currency).toBe('INR');
+    });
+
+    it('should accept standard valid amount ₹250 with 200 and return created order', async () => {
+      const res = await request(app)
+        .post('/api/donations/create-order')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ campaign_id: campaignId, amount: 250 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.order_id).toBeDefined();
+      expect(res.body.amount).toBe(25000);
+      expect(res.body.currency).toBe('INR');
     });
   });
 });
