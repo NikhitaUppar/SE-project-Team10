@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Code Coverage Report — Micro Donation Platform</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6f9; color: #222; padding: 40px; }
+  .page { max-width: 850px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 48px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+
+  /* Header */
+  .header { text-align: center; border-bottom: 3px solid #4f46e5; padding-bottom: 24px; margin-bottom: 32px; }
+  .header h1 { font-size: 26px; color: #4f46e5; margin-bottom: 6px; }
+  .header p { font-size: 13px; color: #666; margin-top: 4px; }
+  .badge { display: inline-block; background: #22c55e; color: white; padding: 4px 14px; border-radius: 20px; font-size: 13px; font-weight: bold; margin-top: 10px; }
+
+  /* Section title */
+  h2 { font-size: 17px; color: #4f46e5; border-left: 4px solid #4f46e5; padding-left: 10px; margin: 32px 0 14px; }
+  h3 { font-size: 14px; color: #333; margin: 18px 0 8px; }
+
+  /* Summary cards */
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 10px; }
+  .card { background: #f0fdf4; border: 2px solid #22c55e; border-radius: 10px; text-align: center; padding: 18px 10px; }
+  .card .num { font-size: 28px; font-weight: 800; color: #16a34a; }
+  .card .label { font-size: 12px; color: #555; margin-top: 4px; }
+
+  /* Test result cards */
+  .test-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .test-card { background: #f0fdf4; border: 1.5px solid #bbf7d0; border-radius: 8px; padding: 14px 16px; }
+  .test-card .tc-num { font-size: 22px; font-weight: 800; color: #16a34a; }
+  .test-card .tc-label { font-size: 12px; color: #555; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th { background: #4f46e5; color: white; padding: 10px 12px; text-align: left; }
+  td { padding: 9px 12px; border-bottom: 1px solid #e5e7eb; }
+  tr:nth-child(even) td { background: #f9fafb; }
+  .pct { font-weight: 700; }
+  .green { color: #16a34a; }
+  .blue { color: #4f46e5; }
+
+  /* Branch examples */
+  .branch-box { background: #f8faff; border: 1.5px solid #c7d2fe; border-radius: 8px; padding: 16px 20px; margin-bottom: 14px; }
+  .branch-box h3 { color: #4f46e5; margin-bottom: 10px; font-size: 14px; }
+  .branch-row { display: flex; align-items: flex-start; gap: 10px; margin: 6px 0; font-size: 13px; }
+  .tick { color: #22c55e; font-size: 16px; font-weight: bold; flex-shrink: 0; }
+
+  /* Conclusion */
+  .conclusion { background: #f0fdf4; border: 2px solid #22c55e; border-radius: 10px; padding: 20px 24px; margin-top: 24px; }
+  .conclusion h2 { border-color: #22c55e; color: #16a34a; margin-top: 0; }
+  .conclusion p { font-size: 14px; line-height: 1.7; color: #333; }
+
+  /* Footer */
+  .footer { text-align: center; margin-top: 36px; font-size: 12px; color: #aaa; border-top: 1px solid #e5e7eb; padding-top: 16px; }
+
+  /* Contribution box */
+  .contrib { background: #eff6ff; border: 1.5px solid #bfdbfe; border-radius: 8px; padding: 16px 20px; }
+  .contrib li { font-size: 13px; line-height: 1.9; color: #334155; }
+
+  @media print {
+    body { background: white; padding: 0; }
+    .page { box-shadow: none; padding: 32px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <h1>Code Coverage Report</h1>
+    <p>Micro Donation Platform &nbsp;|&nbsp; SE Mini Project — Team 10</p>
+    <p>Prepared by: <strong>Haris</strong> &nbsp;|&nbsp; Date: <strong>15 November 2026</strong></p>
+    <p>Tool: <strong>Jest --coverage</strong> &nbsp;|&nbsp; Language: <strong>Node.js / Express</strong></p>
+    <span class="badge">✅ NFR-10 Target MET — All Coverage Goals Achieved</span>
+  </div>
+
+  <!-- OVERALL RESULTS -->
+  <h2>Overall Coverage Results</h2>
+  <div class="cards">
+    <div class="card">
+      <div class="num">83.36%</div>
+      <div class="label">Line Coverage</div>
+    </div>
+    <div class="card">
+      <div class="num">81.42%</div>
+      <div class="label">Statement Coverage</div>
+    </div>
+    <div class="card">
+      <div class="num">77.87%</div>
+      <div class="label">Function Coverage</div>
+    </div>
+    <div class="card">
+      <div class="num">70.17%</div>
+      <div class="label">Branch Coverage</div>
+    </div>
+  </div>
+
+  <!-- TEST RESULTS -->
+  <h2>Test Results</h2>
+  <div class="test-cards">
+    <div class="test-card">
+      <div class="tc-num">302 / 302</div>
+      <div class="tc-label">Total Tests Passed ✅</div>
+    </div>
+    <div class="test-card">
+      <div class="tc-num">26 / 26</div>
+      <div class="tc-label">Test Suites Passed ✅</div>
+    </div>
+  </div>
+
+  <!-- PER FILE COVERAGE -->
+  <h2>Per-File Coverage (Key Files)</h2>
+  <table>
+    <tr>
+      <th>Module / File</th>
+      <th>Statements</th>
+      <th>Branch</th>
+      <th>Functions</th>
+      <th>Lines</th>
+    </tr>
+    <tr><td colspan="5" style="background:#ede9fe;color:#4f46e5;font-weight:600;font-size:12px;padding:6px 12px;">Controllers</td></tr>
+    <tr><td>authController.js</td><td class="pct green">98.43%</td><td class="pct green">94.73%</td><td class="pct green">100%</td><td class="pct green">99.15%</td></tr>
+    <tr><td>signupController.js</td><td class="pct green">94.68%</td><td class="pct green">88.05%</td><td class="pct green">100%</td><td class="pct green">97.53%</td></tr>
+    <tr><td>adminController.js</td><td class="pct green">92.3%</td><td class="pct green">86%</td><td class="pct green">75%</td><td class="pct green">95.12%</td></tr>
+    <tr><td>campaignDonorsController.js</td><td class="pct green">92.85%</td><td class="pct green">75%</td><td class="pct green">100%</td><td class="pct green">91.66%</td></tr>
+    <tr><td>userController.js</td><td class="pct green">100%</td><td class="pct green">70%</td><td class="pct green">100%</td><td class="pct green">100%</td></tr>
+    <tr><td>donationController.js</td><td class="pct blue">64.13%</td><td class="pct blue">58.95%</td><td class="pct green">100%</td><td class="pct blue">67.91%</td></tr>
+    <tr><td>campaignController.js</td><td class="pct blue">63.91%</td><td class="pct blue">56.42%</td><td class="pct blue">62.5%</td><td class="pct blue">66.03%</td></tr>
+    <tr><td colspan="5" style="background:#ede9fe;color:#4f46e5;font-weight:600;font-size:12px;padding:6px 12px;">Middleware</td></tr>
+    <tr><td>auth.js (JWT Guard)</td><td class="pct green">100%</td><td class="pct green">100%</td><td class="pct green">100%</td><td class="pct green">100%</td></tr>
+    <tr><td>passwordResetRateLimit.js</td><td class="pct green">100%</td><td class="pct green">100%</td><td class="pct green">100%</td><td class="pct green">100%</td></tr>
+    <tr><td colspan="5" style="background:#ede9fe;color:#4f46e5;font-weight:600;font-size:12px;padding:6px 12px;">Services</td></tr>
+    <tr><td>emailVerification.js</td><td class="pct green">100%</td><td class="pct green">100%</td><td class="pct green">100%</td><td class="pct green">100%</td></tr>
+    <tr><td>campaignLifecycle.js</td><td class="pct green">100%</td><td class="pct green">76.19%</td><td class="pct green">100%</td><td class="pct green">100%</td></tr>
+    <tr><td>campaignDonors.js</td><td class="pct green">94.59%</td><td class="pct green">87.27%</td><td class="pct green">100%</td><td class="pct green">100%</td></tr>
+    <tr><td>paymentSettlement.js</td><td class="pct green">100%</td><td class="pct green">83.33%</td><td class="pct green">100%</td><td class="pct green">100%</td></tr>
+    <tr><td colspan="5" style="background:#ede9fe;color:#4f46e5;font-weight:600;font-size:12px;padding:6px 12px;">Jobs &amp; Routes</td></tr>
+    <tr><td>campaignExpiryJob.js</td><td class="pct green">100%</td><td class="pct green">63.63%</td><td class="pct green">100%</td><td class="pct green">100%</td></tr>
+    <tr><td>admin.js / auth.js / donations.js / users.js</td><td class="pct green">100%</td><td class="pct green">100%</td><td class="pct green">100%</td><td class="pct green">100%</td></tr>
+  </table>
+
+  <!-- BRANCH COVERAGE EXAMPLES -->
+  <h2>Branch Coverage — Examples</h2>
+  <p style="font-size:13px;color:#555;margin-bottom:14px;">
+    Branch coverage checks whether <strong>both sides of every if/else</strong> in the code were tested.
+    For every decision in the code, we tested what happens when it goes <em>right</em> and when it goes <em>wrong</em>.
+  </p>
+
+  <div class="branch-box">
+    <h3>Example 1 — User Login (94.73% branches ✅)</h3>
+    <div class="branch-row"><span class="tick">✅</span> Correct email &amp; password → returns JWT token (200 OK)</div>
+    <div class="branch-row"><span class="tick">✅</span> Wrong password → returns 401 Invalid credentials</div>
+    <div class="branch-row"><span class="tick">✅</span> Unverified account → returns 403 Please verify email</div>
+    <div class="branch-row"><span class="tick">✅</span> Missing fields → returns 400 Bad Request</div>
+    <div class="branch-row"><span class="tick">✅</span> Password too long (&gt;72 bytes) → returns 400 Bad Request</div>
+  </div>
+
+  <div class="branch-box">
+    <h3>Example 2 — Admin Approve / Reject Campaign (86% branches ✅)</h3>
+    <div class="branch-row"><span class="tick">✅</span> Approve existing campaign → status set to active, email sent (200)</div>
+    <div class="branch-row"><span class="tick">✅</span> Approve non-existing campaign → returns 404 Campaign not found</div>
+    <div class="branch-row"><span class="tick">✅</span> Reject campaign with reason → status set to rejected (200)</div>
+    <div class="branch-row"><span class="tick">✅</span> Reject campaign without reason → still works, no crash</div>
+    <div class="branch-row"><span class="tick">✅</span> Owner has no email → email skipped, no crash</div>
+  </div>
+
+  <div class="branch-box">
+    <h3>Example 3 — OTP Signup Flow (88.05% branches ✅)</h3>
+    <div class="branch-row"><span class="tick">✅</span> Send OTP code → 6-digit code dispatched to email</div>
+    <div class="branch-row"><span class="tick">✅</span> Submit correct OTP → returns verification proof token</div>
+    <div class="branch-row"><span class="tick">✅</span> Submit wrong OTP → returns 400 Incorrect code</div>
+    <div class="branch-row"><span class="tick">✅</span> 5 wrong attempts → returns 429 Too many attempts</div>
+    <div class="branch-row"><span class="tick">✅</span> OTP expired → returns 400 Code expired</div>
+    <div class="branch-row"><span class="tick">✅</span> Complete signup with valid proof → account created (201)</div>
+  </div>
+
+  <div class="branch-box">
+    <h3>Example 4 — JWT Auth Middleware (100% branches ✅)</h3>
+    <div class="branch-row"><span class="tick">✅</span> Valid token → request passes through to route handler</div>
+    <div class="branch-row"><span class="tick">✅</span> Missing Authorization header → returns 401</div>
+    <div class="branch-row"><span class="tick">✅</span> Expired token → returns 401 Token expired</div>
+    <div class="branch-row"><span class="tick">✅</span> Password changed (auth_version mismatch) → returns 401 Session expired</div>
+    <div class="branch-row"><span class="tick">✅</span> Donor accessing admin route → returns 403 Forbidden</div>
+  </div>
+
+  <div class="branch-box">
+    <h3>Example 5 — Payment Settlement Service (83.33% branches ✅)</h3>
+    <div class="branch-row"><span class="tick">✅</span> Valid payment captured → donation status updated to completed</div>
+    <div class="branch-row"><span class="tick">✅</span> Payment already processed → returns already_completed (idempotent)</div>
+    <div class="branch-row"><span class="tick">✅</span> Unknown order ID → returns missing status</div>
+    <div class="branch-row"><span class="tick">✅</span> Wrong donor attempting payment → returns forbidden</div>
+    <div class="branch-row"><span class="tick">✅</span> Database error → throws error, transaction rolled back</div>
+  </div>
+
+  <!-- WHAT WAS DONE -->
+  <h2>Work Done for Coverage Testing</h2>
+  <div class="contrib">
+    <ul style="list-style:none;padding:0;">
+      <li>✅ &nbsp; Read the README, project docs, and all source files to understand the system</li>
+      <li>✅ &nbsp; Ran <code>npm test --coverage</code> to collect real coverage numbers from Jest</li>
+      <li>✅ &nbsp; Analysed every file individually for line, branch, function, and statement coverage</li>
+      <li>✅ &nbsp; Identified that <strong>adminController.js</strong> and <strong>paymentSettlement.js</strong> had no tests written</li>
+      <li>✅ &nbsp; Wrote <strong>17 new tests</strong> for the Admin Controller (approve, reject, metrics)</li>
+      <li>✅ &nbsp; Wrote <strong>8 new tests</strong> for the Payment Settlement service (success, error, edge cases)</li>
+      <li>✅ &nbsp; Improved branch coverage from <strong>64.91% → 70.17%</strong> (above the 70% target)</li>
+      <li>✅ &nbsp; Final result: <strong>302 tests all passing</strong> across <strong>26 test suites</strong></li>
+    </ul>
+  </div>
+
+  <!-- CONCLUSION -->
+  <div class="conclusion">
+    <h2>✅ Conclusion</h2>
+    <p>
+      The Micro Donation Platform backend has been thoroughly tested using Jest with coverage reporting.
+      All <strong>4 coverage metrics exceed the NFR-10 requirement of ≥ 70%</strong>.
+      The test suite covers all critical features including user authentication (OTP signup, login, password reset),
+      campaign management, Razorpay payment flow, donor dashboard, admin panel, and automated campaign expiry.
+      A total of <strong>302 tests pass</strong> across <strong>26 test suites</strong>, confirming that the application
+      behaves correctly across both normal and edge-case scenarios.
+    </p>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    Code Coverage Report &nbsp;|&nbsp; SE Mini Project — Micro Donation Platform — Team 10 &nbsp;|&nbsp; 15 November 2026
+  </div>
+
+</div>
+</body>
+</html>
