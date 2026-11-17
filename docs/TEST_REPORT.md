@@ -146,27 +146,7 @@ All files                     |   77.41 |    64.91 |   71.68 |   79.91 |
 The following user flows require manual testing against the staging deployment.  
 See [TEST_CASES.md](TEST_CASES.md) for the full list (MT-01 through MT-18).
 
-| Flow | Assigned to | Status |
-|---|---|---|
-| MT-01 Donor signup (OTP) | — | ⬜ Pending |
-| MT-02 Donor login | — | ⬜ Pending |
-| MT-03 Browse campaigns (guest) | — | ⬜ Pending |
-| MT-04 Category filters | — | ⬜ Pending |
-| MT-05 Campaign detail page | — | ⬜ Pending |
-| MT-06 Make a donation (Razorpay test mode) | — | ⬜ Pending |
-| MT-07 Anonymous donation | — | ⬜ Pending |
-| MT-08–10 Donation boundary & over-limit | — | ⬜ Pending |
-| MT-11 Create campaign with proof upload | — | ⬜ Pending |
-| MT-12 Admin approve campaign | — | ⬜ Pending |
-| MT-13 Campaign progress update | — | ⬜ Pending |
-| MT-14 Auto-close expired campaign | — | ⬜ Pending |
-| MT-15 Donor leaderboard | — | ⬜ Pending |
-| MT-16 Password reset & session revocation | — | ⬜ Pending |
-| MT-17 My campaigns dashboard | — | ⬜ Pending |
-| MT-18 Fundraising stats | — | ⬜ Pending |
-
-**Staging URL**: *(to be filled after deployment)*  
-**Razorpay test card**: 4111 1111 1111 1111 · any future expiry · any CVV
+The files are in Nikhita in testing
 
 ---
 
