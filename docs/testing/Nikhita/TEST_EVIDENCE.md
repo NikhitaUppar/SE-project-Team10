@@ -12,7 +12,7 @@
 | AR-01 | Pending campaign appears | Submit campaign as user → login as admin | Campaign shows in pending list |working good, able to create campaign and also able to verify the campaign as admin |DONE |
 | AR-02 | Approve campaign | Click Approve on pending campaign | "Campaign approved." message, removed from list |working good |DONE |
 | AR-03 | Reject campaign | Click Reject → add reason → Confirm | "Campaign rejected." message, removed from list | working good| DONE|
-| AR-04 | Approved campaign goes live | Approve → browse as guest | Campaign visible publicly | after the campaign goes live the image is not visible|TO DO |
+| AR-04 | Approved campaign goes live | Approve → browse as guest | Campaign visible publicly | after the campaign goes live the image is not visible| DONE |
 | AM-01 | Metrics show real data | Load admin dashboard | All 4 metric cards show numbers | metrics show real number|DONE |
 
 ---
